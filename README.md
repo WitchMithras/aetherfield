@@ -1,0 +1,27 @@
+AeTherField Staging
+===================
+
+This folder stages a future standalone package for AetherField — a Skyfield-free
+runtime ephemeris model that uses learned calibration/piecewise drift and offers
+simple APIs for signs, longitudes, alignments, phases, and (now) sunrise/sunset
+estimation.
+
+Plan
+- Extract reusable runtime core from the root `aetherfield.py`.
+- Preserve public APIs: `aether_longitude`, `aether_sign`, `aether_alignments`, `moon_phase`.
+- Add `sunrise_sunset(zone, coords, date, depression_deg)` for Moontime temporal hours.
+- Keep calibration loaders and CLI tools in a tools subpackage.
+ - Console scripts (staging): `aetherfield-compare`, `aetherfield-benchmark`, `aetherfield-calibrate-all`.
+
+Local Layout (staging)
+- `src/aetherfield_pkg/` — package source (to be populated)
+- `pyproject.toml` — packaging config (setuptools)
+
+Dev Tips
+- Create a venv and install local deps from the project root as usual.
+- In staging, the package may re-export from the root `aetherfield.py` to avoid duplication.
+
+CLI Usage (staging)
+- Compare a single timestamp: `python -m aetherfield_pkg.cli.compare --body mars --dt 2025-06-21T12:00:00Z`
+- Benchmark a range: `python -m aetherfield_pkg.cli.benchmark --start 2001-01-01T00:00:00Z --end 2001-12-31T00:00:00Z`
+- Calibrate all: `python -m aetherfield_pkg.cli.calibrate_all --out aetherfield_calibration.json`

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aetherfield"
+version = "0.1.0"
+description = "AetherField runtime ephemeris"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "WitchMithras" }]
+license = { text = "MIT" }
+
+dependencies = [
+  "pytz>=2023.3",
+]
+
+keywords = ["time", "calendar", "lunar", "astronomy"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent"
+]
+
+[project.urls]
+Homepage = "https://github.com/WitchMithras/aetherfield"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["aetherfield_pkg*"]
+exclude = ["tests*"]
+
+[project.scripts]
+aetherfield-compare = "aetherfield_pkg.cli.compare:main"
+aetherfield-benchmark = "aetherfield_pkg.cli.benchmark:main"
+aetherfield-calibrate-all = "aetherfield_pkg.cli.calibrate_all:main"
