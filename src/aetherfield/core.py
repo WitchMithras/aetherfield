@@ -29,6 +29,16 @@ bodies = ['sun','moon','mercury','venus','mars','jupiter','saturn']
 # Mean regression of lunar nodes (~18.6 year cycle)
 DRACONIC_RATE_DEG_PER_DAY = -360.0 / (18.612958 * 365.2422)
 
+SIGNS = [
+    "Aries", "Taurus", "Gemini", "Cancer", "Leo",
+    "Virgo", "Libra", "Scorpio", "Sagittarius",
+    "Capricorn", "Aquarius", "Pisces"
+]
+
+AGE_LENGTH = 2147.67
+
+ANCHOR_YEAR = 1
+ANCHOR_SIGN = "Pisces"
 
 def _wrap_deg(x: float) -> float:
     return x % 360.0
@@ -167,25 +177,18 @@ try:
 except Exception:
     SKYFIELD_OK = False
 
-AGES = [
-    ("Taurus", -4300, -2150),
-    ("Aries", -2150, 1),
-    ("Pisces", 1, 2150),
-    ("Aquarius", 2150, 4300),
-]
+
 
 def get_age_sign(year: int) -> str:
-    for sign, start, end in AGES:
-        if start <= year < end:
-            return sign
-    return "Pisces"  # fallback default
 
-SIGNS = [
-    "Aries", "Taurus", "Gemini", "Cancer", "Leo",
-    "Virgo", "Libra", "Scorpio", "Sagittarius",
-    "Capricorn", "Aquarius", "Pisces"
-]
 
+    offset_years = year - ANCHOR_YEAR
+    age_index_offset = offset_years // AGE_LENGTH
+
+    anchor_index = SIGNS.index(ANCHOR_SIGN)
+    sign_index = (anchor_index + age_index_offset) % 12
+
+    return SIGNS[int(sign_index)]
 
 def rotated_zodiac(start_sign: str) -> list[str]:
     i = SIGNS.index(start_sign)
