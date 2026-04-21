@@ -4,18 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aetherfield"
-version = "0.2.3"
+version = "0.2.6"
 description = "AetherField runtime ephemeris"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "WitchMithras" }]
-license = { text = "MIT" }
+license = { text = "Other/Proprietary License" }
 
 dependencies = [
   "pytz>=2023.3",
 ]
 
-keywords = ["zodiac", "alignment", "solar", "astronomy"]
+keywords = ["zodiac", "alignment", "celestial", "astronomy", "mirror"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",

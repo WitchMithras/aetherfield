@@ -1,11 +1,11 @@
 Metadata-Version: 2.4
 Name: aetherfield
-Version: 0.2.3
+Version: 0.2.6
 Summary: AetherField runtime ephemeris
 Author: WitchMithras
-License: MIT
+License: Other/Proprietary License
 Project-URL: Homepage, https://github.com/WitchMithras/aetherfield
-Keywords: zodiac,alignment,solar,astronomy
+Keywords: zodiac,alignment,celestial,astronomy,mirror
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.11
 Classifier: License :: Other/Proprietary License
