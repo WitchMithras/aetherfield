@@ -5,17 +5,29 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple, List
 from pathlib import Path
 import os
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except Exception:
+    def load_dotenv(*_args, **_kwargs):
+        return False
+from functools import lru_cache
 # --- aetherfield: is_up utilities -------------------------------------------
 import math
 from datetime import timezone
-from .iplocal import get_ip_data
+try:
+    from .iplocal import get_ip_data  # type: ignore
+except Exception:
+    def get_ip_data():
+        return '0,0', 'UTC', 0
 
 
 # Mean obliquity (degrees). You can make this tunable from your calibration file if you want.
 OBLIQUITY_DEG = 23.43928
 
 bodies = ['sun','moon','mercury','venus','mars','jupiter','saturn']
+
+# Mean regression of lunar nodes (~18.6 year cycle)
+DRACONIC_RATE_DEG_PER_DAY = -360.0 / (18.612958 * 365.2422)
 
 
 def _wrap_deg(x: float) -> float:
@@ -24,6 +36,77 @@ def _wrap_deg(x: float) -> float:
 def _angdiff_deg(a: float, b: float) -> float:
     """Signed smallest difference a-b in (-180, +180]."""
     return ((a - b + 180.0) % 360.0) - 180.0
+
+
+def _canonical_body(name: Any) -> str:
+    if not isinstance(name, str):
+        return ""
+    key = name.strip().lower()
+    return DRACONIC_ALIASES.get(key, key)
+
+
+def _import_skyfieldcomm():
+    """Best-effort import for pythoness.skyfieldcomm without hard dependency."""
+    for mod_name in (
+        "pythoness.skyfieldcomm",
+        "Pythoness.skyfieldcomm",
+        "skyfieldcomm",
+    ):
+        try:
+            return __import__(mod_name, fromlist=("dummy",))
+        except Exception:
+            continue
+    return None
+
+
+def _draconic_base_longitudes(dt: datetime) -> Tuple[float, float]:
+    """Compute ascending/descending node longitudes at dt."""
+    if SKYFIELD_OK:
+        module = _import_skyfieldcomm()
+        if module is not None:
+            find_node_crossing = getattr(module, "find_node_crossing", None)
+            adjust_node_position = getattr(module, "adjust_node_position", None)
+            if callable(find_node_crossing) and callable(adjust_node_position):
+                try:
+                    anchor_time, anchor_lon = find_node_crossing(initial_time=dt, direction='backward')
+                    asc = float(adjust_node_position(anchor_time, anchor_lon, dt))
+                    asc %= 360.0
+                    desc = (asc + 180.0) % 360.0
+                    return asc, desc
+                except Exception:
+                    pass
+    delta_days = (dt - DRACONIC_ANCHOR_EPOCH).total_seconds() / 86400.0
+    asc = (DRACONIC_ANCHOR_ASC_LON + DRACONIC_RATE_DEG_PER_DAY * delta_days) % 360.0
+    desc = (asc + 180.0) % 360.0
+    return asc, desc
+
+
+def _draconic_cache_key(dt: datetime) -> Tuple[int, int, int]:
+    dt_utc = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+    dt_utc = dt_utc.astimezone(UTC)
+    base = dt_utc.replace(minute=0, second=0, microsecond=0)
+    return base.year, base.timetuple().tm_yday, base.hour
+
+
+@lru_cache(maxsize=128)
+def _draconic_longitudes_cached(year: int, yearday: int, hour: int) -> Tuple[float, float]:
+    base = datetime(year, 1, 1, tzinfo=UTC) + timedelta(days=yearday - 1, hours=hour)
+    return _draconic_base_longitudes(base)
+
+
+def _get_draconic_longitudes(dt: Any) -> Dict[str, float]:
+    dt_utc = _ensure_utc_datetime(_as_datetime(dt))
+    floor_dt = dt_utc.replace(minute=0, second=0, microsecond=0)
+    cache_key = _draconic_cache_key(dt_utc)
+    asc_base, desc_base = _draconic_longitudes_cached(*cache_key)
+    delta_days = (dt_utc - floor_dt).total_seconds() / 86400.0
+    drift = DRACONIC_RATE_DEG_PER_DAY * delta_days
+    asc = (asc_base + drift) % 360.0
+    desc = (desc_base + drift) % 360.0
+    return {
+        'ascending_node': asc,
+        'descending_node': desc,
+    }
 
 def ecliptic_to_equatorial(lon_deg: float, lat_deg: float = 0.0, eps_deg: float = OBLIQUITY_DEG):
     """
@@ -65,7 +148,17 @@ def _lst_deg(dt, lon_deg):
 
 load_dotenv()
 
-import pytz
+try:
+    import pytz
+except Exception:
+    pytz = None  # type: ignore[assignment]
+    UTC = timezone.utc
+else:
+    UTC = pytz.utc
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 try:
     from skyfield.api import load
@@ -73,6 +166,39 @@ try:
     SKYFIELD_OK = True
 except Exception:
     SKYFIELD_OK = False
+
+AGES = [
+    ("Taurus", -4300, -2150),
+    ("Aries", -2150, 1),
+    ("Pisces", 1, 2150),
+    ("Aquarius", 2150, 4300),
+]
+
+def get_age_sign(year: int) -> str:
+    for sign, start, end in AGES:
+        if start <= year < end:
+            return sign
+    return "Pisces"  # fallback default
+
+SIGNS = [
+    "Aries", "Taurus", "Gemini", "Cancer", "Leo",
+    "Virgo", "Libra", "Scorpio", "Sagittarius",
+    "Capricorn", "Aquarius", "Pisces"
+]
+
+
+def rotated_zodiac(start_sign: str) -> list[str]:
+    i = SIGNS.index(start_sign)
+    return SIGNS[i:] + SIGNS[:i]
+
+def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
+    dt = _as_datetime(dt)
+    year = dt.year
+    age_sign = get_age_sign(year)
+    signs = rotated_zodiac(age_sign)
+
+    i = int(longitude // 30) % 12
+    return signs[i]
 
 try:
     # Reuse existing helper for sign segmentation if present
@@ -88,9 +214,115 @@ except Exception:
         return signs[i]
 
 
-UTC = pytz.utc
 DE421_START = datetime(1951, 1, 1, tzinfo=UTC)
 DE421_END = datetime(2050, 12, 31, 23, 59, 59, tzinfo=UTC)
+DE400_START = datetime(1550, 1, 1, tzinfo=UTC)
+DE400_END = datetime(2650, 12, 31, 23, 59, 59, tzinfo=UTC)
+# DE441 spans beyond Python's datetime range; clamp to supported bounds.
+DE441_START = datetime(1, 1, 1, tzinfo=UTC)
+DE441_END = datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC)
+
+
+@dataclass(frozen=True)
+class EphemerisSpec:
+    name: str
+    filename: str
+    start: datetime
+    end: datetime
+    true_start_year: int
+    true_end_year: int
+
+
+_DE440_SPEC = EphemerisSpec(
+    name="de440",
+    filename="de440.bsp",
+    start=DE400_START,
+    end=DE400_END,
+    true_start_year=1550,
+    true_end_year=2650,
+)
+
+EPHEMERIS_SPECS: Dict[str, EphemerisSpec] = {
+    "de421": EphemerisSpec(
+        name="de421",
+        filename="de421.bsp",
+        start=DE421_START,
+        end=DE421_END,
+        true_start_year=1951,
+        true_end_year=2050,
+    ),
+    "de440": _DE440_SPEC,
+    "de400": _DE440_SPEC,  # alias for de440
+    "de441": EphemerisSpec(
+        name="de441",
+        filename="de441.bsp",
+        start=DE441_START,
+        end=DE441_END,
+        true_start_year=-13200,
+        true_end_year=17191,
+    ),
+}
+EPHEMERIS_PREFERENCE = ("de441", "de440", "de421")
+
+
+def _ephemeris_search_paths() -> List[Path]:
+    here = Path(__file__).resolve()
+    paths = [Path.cwd(), here.parent]
+    paths.extend(here.parents)
+    seen = set()
+    ordered: List[Path] = []
+    for p in paths:
+        try:
+            resolved = p.resolve()
+        except Exception:
+            resolved = p
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        ordered.append(resolved)
+    return ordered
+
+
+def _resolve_ephemeris_path(name_or_path: str) -> Optional[Path]:
+    if not name_or_path:
+        return None
+    candidate = Path(name_or_path)
+    if candidate.is_file():
+        return candidate.resolve()
+    filename = name_or_path if name_or_path.lower().endswith(".bsp") else f"{name_or_path}.bsp"
+    for base in _ephemeris_search_paths():
+        path = base / filename
+        if path.is_file():
+            return path.resolve()
+    return None
+
+
+def _select_calibration_ephemeris() -> Tuple[EphemerisSpec, Optional[Path]]:
+    requested = os.getenv("AETHER_CAL_EPHEMERIS", "").strip().lower()
+    if requested:
+        spec = EPHEMERIS_SPECS.get(requested)
+        if spec:
+            return spec, _resolve_ephemeris_path(spec.filename) or _resolve_ephemeris_path(requested)
+        path = _resolve_ephemeris_path(requested)
+        if path:
+            name = path.stem.lower()
+            return EPHEMERIS_SPECS.get(name, EPHEMERIS_SPECS["de421"]), path
+        return EPHEMERIS_SPECS.get(requested, EPHEMERIS_SPECS["de421"]), None
+    for key in EPHEMERIS_PREFERENCE:
+        spec = EPHEMERIS_SPECS[key]
+        path = _resolve_ephemeris_path(spec.filename)
+        if path:
+            return spec, path
+    return EPHEMERIS_SPECS["de421"], _resolve_ephemeris_path("de421.bsp")
+
+
+_CAL_EPHEMERIS_SPEC, _CAL_EPHEMERIS_PATH = _select_calibration_ephemeris()
+EPHEMERIS_NAME = _CAL_EPHEMERIS_SPEC.name
+EPHEMERIS_PATH = str(_CAL_EPHEMERIS_PATH) if _CAL_EPHEMERIS_PATH else _CAL_EPHEMERIS_SPEC.filename
+EPHEMERIS_START = _CAL_EPHEMERIS_SPEC.start
+EPHEMERIS_END = _CAL_EPHEMERIS_SPEC.end
+EPHEMERIS_TRUE_START_YEAR = _CAL_EPHEMERIS_SPEC.true_start_year
+EPHEMERIS_TRUE_END_YEAR = _CAL_EPHEMERIS_SPEC.true_end_year
 
 
 # Mean sidereal/orbital motion in degrees per day (approximate)
@@ -106,7 +338,33 @@ MEAN_DEG_PER_DAY: Dict[str, float] = {
     "uranus": 360.0 / 30688.5,       # ~0.011749
     "neptune": 360.0 / 60182.0,      # ~0.005981
     "pluto": 360.0 / 90560.0,        # ~0.003977
+    "ascending_node": DRACONIC_RATE_DEG_PER_DAY,
+    "descending_node": DRACONIC_RATE_DEG_PER_DAY,
 }
+
+DRACONIC_BODY_NAMES = ("ascending_node", "descending_node")
+DRACONIC_ALIASES = {
+    "ascending_node": "ascending_node",
+    "ascending": "ascending_node",
+    "north_node": "ascending_node",
+    "rahu": "ascending_node",
+    "dragon_head": "ascending_node",
+    "descending_node": "descending_node",
+    "descending": "descending_node",
+    "south_node": "descending_node",
+    "ketu": "descending_node",
+    "dragon_tail": "descending_node",
+}
+ALIGNMENT_BODIES: Tuple[str, ...] = (
+    "sun", "moon", "mercury", "venus", "mars",
+    "jupiter", "saturn", "uranus", "neptune", "pluto",
+    "ascending_node", "descending_node",
+)
+
+PLANET_ALIGNMENT_BODIES: Tuple[str, ...] = tuple(b for b in ALIGNMENT_BODIES if b not in DRACONIC_BODY_NAMES)
+
+DRACONIC_ANCHOR_EPOCH = datetime(2000, 1, 1, 12, tzinfo=UTC)
+DRACONIC_ANCHOR_ASC_LON = 125.044555  # Mean ascending node longitude @ J2000
 
 planet_eph = {
     'jupiter': 5,
@@ -131,14 +389,104 @@ def _resolve_cal_path(path: str) -> Path:
     return p2 if p2.is_file() else Path(path)
 
 
-def _in_de421(dt: datetime) -> bool:
-    dt_utc = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-    dt_utc = dt_utc.astimezone(UTC)
-    return DE421_START <= dt_utc <= DE421_END
+def _ensure_utc_datetime(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _is_skyfield_time(value: Any) -> bool:
+    return bool(
+        hasattr(value, "tt")
+        and hasattr(value, "ts")
+        and callable(getattr(value, "utc_datetime", None))
+    )
+
+
+def is_skyfield_time(value: Any) -> bool:
+    """Public helper to detect Skyfield Time objects."""
+    return _is_skyfield_time(value)
+
+
+def make_skyfield_time(
+    ts,
+    *,
+    year: int,
+    month: int = 1,
+    day: int = 1,
+    hour: int = 0,
+    minute: int = 0,
+    second: int = 0,
+):
+    """
+    Create a Skyfield Time, supporting BCE via astronomical year numbering.
+    """
+    return ts.utc(year, month, day, hour, minute, second)
+
+
+def _get_timescale():
+    if not SKYFIELD_OK:
+        raise RuntimeError("Skyfield not available for time conversions")
+    global _SF_TS
+    try:
+        _SF_TS
+    except NameError:
+        _SF_TS = None  # type: ignore[var-annotated]
+    if _SF_TS is None:
+        _SF_TS = load.timescale()
+    return _SF_TS
+
+
+def _as_skyfield_time(ts, time_value: Any):
+    if _is_skyfield_time(time_value):
+        return time_value
+    if isinstance(time_value, datetime):
+        dt = time_value
+    else:
+        dt = _as_datetime(time_value)
+    dt = _ensure_utc_datetime(dt)
+    return ts.from_datetime(dt)
+
+
+def _in_ephemeris_window(dt: Any) -> bool:
+    if _is_skyfield_time(dt):
+        if not SKYFIELD_OK:
+            return False
+        ts = getattr(dt, "ts", None) or _get_timescale()
+        dt_tt = float(dt.tt)
+        true_start = EPHEMERIS_TRUE_START_YEAR
+        true_end = EPHEMERIS_TRUE_END_YEAR
+        if true_start is not None and true_end is not None:
+            if true_start < 1 or true_end > 9999:
+                start_t = make_skyfield_time(ts, year=true_start, month=1, day=1)
+                end_t = make_skyfield_time(ts, year=true_end, month=12, day=31, hour=23, minute=59, second=59)
+                return float(start_t.tt) <= dt_tt <= float(end_t.tt)
+        start_tt = float(ts.from_datetime(_ensure_utc_datetime(EPHEMERIS_START)).tt)
+        end_tt = float(ts.from_datetime(_ensure_utc_datetime(EPHEMERIS_END)).tt)
+        return start_tt <= dt_tt <= end_tt
+    dt_utc = _ensure_utc_datetime(_as_datetime(dt))
+    return EPHEMERIS_START <= dt_utc <= EPHEMERIS_END
+
+
+def _in_de421(dt: Any) -> bool:
+    return _in_ephemeris_window(dt)
+
+
+def in_ephemeris_window(dt: Any) -> bool:
+    """Public wrapper for ephemeris window checks."""
+    return _in_ephemeris_window(dt)
 
 
 def _as_datetime(dt_or_mt: Any) -> datetime:
-    """Accept a datetime or a MoonTime-like object with to_datetime()."""
+    """Accept a datetime, Skyfield Time, or MoonTime-like object with to_datetime()."""
+    if _is_skyfield_time(dt_or_mt):
+        try:
+            dt = dt_or_mt.utc_datetime()
+        except Exception as exc:
+            raise ValueError(
+                "Skyfield Time is outside the supported datetime range"
+            ) from exc
+        return _ensure_utc_datetime(dt)
     if isinstance(dt_or_mt, datetime):
         return dt_or_mt
     to_dt = getattr(dt_or_mt, 'to_datetime', None)
@@ -147,7 +495,9 @@ def _as_datetime(dt_or_mt: Any) -> datetime:
         if not isinstance(dt, datetime):
             raise TypeError("to_datetime() did not return a datetime")
         return dt
-    raise TypeError("Expected datetime or MoonTime-like object with to_datetime()")
+    raise TypeError(
+        "Expected datetime, Skyfield Time, or MoonTime-like object with to_datetime()"
+    )
 
 
 def _body_key(eph, name: str):
@@ -178,48 +528,63 @@ def _body_key(eph, name: str):
     raise KeyError(f"Body key not found for: {name}")
 
 
-def _ecliptic_longitude_skyfield(dt: datetime, body: str) -> float:
+def get_body_key(eph, name: str):
+    """Public wrapper for ephemeris body key resolution."""
+    return _body_key(eph, name)
+
+
+def _get_ephemeris():
     if not SKYFIELD_OK:
         raise RuntimeError("Skyfield not available for anchor computation")
-    # Cache ephemeris and timescale to avoid reloading for every call
-    global _SF_EPH, _SF_TS
+    global _SF_EPH, _SF_TS, _SF_EPH_PATH
     try:
         _SF_EPH
     except NameError:
         _SF_EPH = None  # type: ignore[var-annotated]
         _SF_TS = None   # type: ignore[var-annotated]
-    if _SF_EPH is None or _SF_TS is None:
-        _SF_EPH = load('de421.bsp')
-        _SF_TS = load.timescale()
-    eph = _SF_EPH
-    ts = _SF_TS
+        _SF_EPH_PATH = None  # type: ignore[var-annotated]
+    if _SF_EPH is None or _SF_TS is None or _SF_EPH_PATH != EPHEMERIS_PATH:
+        _SF_EPH = load(EPHEMERIS_PATH)
+        _SF_TS = _get_timescale()
+        _SF_EPH_PATH = EPHEMERIS_PATH
+    return _SF_EPH, _SF_TS
+
+
+def _ecliptic_longitude_skyfield(dt: Any, body: str) -> float:
+    if not SKYFIELD_OK:
+        raise RuntimeError("Skyfield not available for anchor computation")     
+    eph, ts = _get_ephemeris()
     earth = eph['earth']
     b = _body_key(eph, body)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    t = ts.from_datetime(dt.astimezone(UTC))
+    t = _as_skyfield_time(ts, dt)
     app = earth.at(t).observe(b).apparent()
-    lon, lat, dist = app.frame_latlon(ecliptic_frame)
+    lat, lon, dist = app.frame_latlon(ecliptic_frame)
     return float(lon.degrees) % 360.0
 
 def fetch_celestial_data(time=None, world='venus', home='earth'):
+    canonical_world = _canonical_body(world)
+    if canonical_world in DRACONIC_BODY_NAMES:
+        dt = datetime.now(timezone.utc) if time is None else time
+        if not isinstance(dt, datetime):
+            dt = _as_datetime(dt)
+        dt = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+        return _get_draconic_longitudes(dt)[canonical_world]
+
     if not SKYFIELD_OK:
         raise RuntimeError("Skyfield not available for anchor computation")
     # Determines the alignment of world in the zodiac from home
-    world = planet_eph.get(world, world)
-    home = planet_eph.get(home, home)
+    canonical_home = _canonical_body(home)
 
-    ts = load.timescale()
-    t = ts.now() if time is None else ts.from_datetime(time)
-    sanitized_time = t.utc_datetime().strftime("%Y%m%d%H%M%S")
+    eph, ts = _get_ephemeris()
+    if time is None:
+        t = ts.now()
+    else:
+        t = _as_skyfield_time(ts, time)
     if time is None:
         time = datetime.now(timezone.utc)
 
-    coarse_model = 'de421.bsp'
-    fine_model = 'de430t.bsp'
-    planets = load(coarse_model)
-    earth = planets[home]
-    sun = planets[world]
+    earth = _body_key(eph, canonical_home)
+    sun = _body_key(eph, canonical_world)
 
     astrometric_sun = earth.at(t).observe(sun)
     ra_sun, dec_sun, distance_sun = astrometric_sun.radec()
@@ -227,8 +592,22 @@ def fetch_celestial_data(time=None, world='venus', home='earth'):
     return ra_deg
 
 
-def _days_between(a: datetime, b: datetime) -> float:
-    return (b - a).total_seconds() / 86400.0
+def _days_between(a: Any, b: Any) -> float:
+    if _is_skyfield_time(a) or _is_skyfield_time(b):
+        if not SKYFIELD_OK:
+            raise RuntimeError("Skyfield not available for time math")
+        if _is_skyfield_time(a):
+            t_a = a
+            ts = getattr(t_a, "ts", None) or _get_timescale()
+            t_b = _as_skyfield_time(ts, b)
+        else:
+            t_b = b
+            ts = getattr(t_b, "ts", None) or _get_timescale()
+            t_a = _as_skyfield_time(ts, a)
+        return float(t_b.tt) - float(t_a.tt)
+    dt_a = _ensure_utc_datetime(_as_datetime(a))
+    dt_b = _ensure_utc_datetime(_as_datetime(b))
+    return (dt_b - dt_a).total_seconds() / 86400.0
 
 
 @dataclass
@@ -246,16 +625,20 @@ class AetherField:
     Approximate celestial positions beyond ephemeris bounds.
 
     Strategy:
-    - Within de421 range: prefer Skyfield (if available).
-    - Beyond range: use anchor longitude at the nearest boundary and advance
+    - Within ephemeris window: prefer Skyfield (if available).
+    - Beyond window: use anchor longitude at the nearest boundary and advance
       using a mean drift rate (deg/day). Optional: rates can be re-fitted from
       Skyfield across a window inside the valid range.
     """
 
     rates_deg_per_day: Dict[str, float] = None
-    anchors_min: Dict[str, float] = None  # longitudes at DE421_START
-    anchors_max: Dict[str, float] = None  # longitudes at DE421_END
-    piecewise: Dict[str, List[DriftSegment]] = None  # per-body linear segments inside de421
+    anchors_min: Dict[str, float] = None  # longitudes at window_start
+    anchors_max: Dict[str, float] = None  # longitudes at window_end
+    piecewise: Dict[str, List[DriftSegment]] = None  # per-body linear segments inside ephemeris window
+    window_start: datetime = None
+    window_end: datetime = None
+    ephemeris_name: Optional[str] = None
+    ephemeris_path: Optional[str] = None
 
     def __post_init__(self):
         if self.rates_deg_per_day is None:
@@ -263,63 +646,92 @@ class AetherField:
         self.anchors_min = self.anchors_min or {}
         self.anchors_max = self.anchors_max or {}
         self.piecewise = self.piecewise or {}
+        if self.window_start is None:
+            self.window_start = EPHEMERIS_START
+        if self.window_end is None:
+            self.window_end = EPHEMERIS_END
+        if self.ephemeris_name is None:
+            self.ephemeris_name = EPHEMERIS_NAME
+        if self.ephemeris_path is None:
+            self.ephemeris_path = EPHEMERIS_PATH
 
     def _ensure_anchor(self, body: str, use_skyfield: bool = False):
-        if body in self.anchors_min and body in self.anchors_max:
+        body_key = _canonical_body(body)
+        if body_key in self.anchors_min and body_key in self.anchors_max:       
             return
+        start = self.window_start
+        end = self.window_end
         if use_skyfield and SKYFIELD_OK:
             try:
-                self.anchors_min.setdefault(body, fetch_celestial_data(DE421_START, body))
+                self.anchors_min.setdefault(body_key, fetch_celestial_data(start, body_key))
             except Exception:
-                self.anchors_min.setdefault(body, 0.0)
+                self.anchors_min.setdefault(body_key, 0.0)
             try:
-                self.anchors_max.setdefault(body, fetch_celestial_data(DE421_END, body))
+                self.anchors_max.setdefault(body_key, fetch_celestial_data(end, body_key))
             except Exception:
-                self.anchors_max.setdefault(body, self.anchors_min.get(body, 0.0))
+                self.anchors_max.setdefault(body_key, self.anchors_min.get(body_key, 0.0))
+            return
+        if body_key in DRACONIC_BODY_NAMES:
+            try:
+                self.anchors_min.setdefault(body_key, _get_draconic_longitudes(start)[body_key])
+            except Exception:
+                self.anchors_min.setdefault(body_key, 0.0)
+            try:
+                self.anchors_max.setdefault(body_key, _get_draconic_longitudes(end)[body_key])
+            except Exception:
+                self.anchors_max.setdefault(body_key, self.anchors_min.get(body_key, 0.0))
             return
         # Runtime fallback: avoid Skyfield; default to zeros if missing
-        self.anchors_min.setdefault(body, 0.0)
-        self.anchors_max.setdefault(body, 0.0)
+        self.anchors_min.setdefault(body_key, 0.0)
+        self.anchors_max.setdefault(body_key, 0.0)
 
     def longitude(self, dt: Any, body: str) -> float:
-        dt = _as_datetime(dt)
-        dt = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-        # Runtime: do not depend on Skyfield; prefer piecewise when available
-        segs = self.piecewise.get(body) if self.piecewise else None
+        body_key = _canonical_body(body)
+        if body_key in DRACONIC_BODY_NAMES:
+            dt_value = _ensure_utc_datetime(_as_datetime(dt))
+            return _get_draconic_longitudes(dt_value)[body_key]
+
+        dt_value = dt if _is_skyfield_time(dt) else _as_datetime(dt)
+        if not _is_skyfield_time(dt_value):
+            dt_value = _ensure_utc_datetime(dt_value)
+        # Runtime: do not depend on Skyfield; prefer piecewise when available   
+        segs = self.piecewise.get(body_key) if self.piecewise else None
         if segs:
-            return self.longitude_piecewise(dt, body)
+            return self.longitude_piecewise(dt_value, body_key)
 
         # Extrapolate from the nearest boundary
-        self._ensure_anchor(body)
-        rate = self.rates_deg_per_day.get(body)
+        self._ensure_anchor(body_key)
+        rate = self.rates_deg_per_day.get(body_key)
         if rate is None:
-            raise KeyError(f"No drift rate for body: {body}")
+            raise KeyError(f"No drift rate for body: {body_key}")
 
-        if dt < DE421_START:
-            days = _days_between(dt, DE421_START)
+        days_from_start = _days_between(self.window_start, dt_value)
+        if days_from_start < 0:
+            days = -days_from_start
             # going backward in time -> subtract motion
-            lon = (self.anchors_min[body] - rate * days) % 360.0
+            lon = (self.anchors_min[body_key] - rate * days) % 360.0
         else:
-            days = _days_between(DE421_END, dt)
-            lon = (self.anchors_max[body] + rate * days) % 360.0
+            days = _days_between(self.window_end, dt_value)
+            lon = (self.anchors_max[body_key] + rate * days) % 360.0
         return lon
 
     # --- Piecewise drift support ---
     def fit_piecewise(self, step_days: int = 30, bodies: Optional[Tuple[str, ...]] = None) -> Dict[str, int]:
         """
-        Build per-body linear drift segments across the de421 window by sampling
+        Build per-body linear drift segments across the ephemeris window by sampling
         Skyfield at a regular cadence. Each consecutive pair of samples defines
         a segment with a local slope (deg/day) and an unwrapped base longitude.
 
         Returns a dict mapping body -> number of segments created.
         """
+        raw_bodies = bodies or tuple(self.rates_deg_per_day.keys())
+        canonical_bodies = tuple(dict.fromkeys(_canonical_body(b) for b in raw_bodies if _canonical_body(b)))
         if not SKYFIELD_OK:
-            return {b: 0 for b in (bodies or tuple(self.rates_deg_per_day.keys()))}
+            return {b: 0 for b in canonical_bodies}
 
-        start = DE421_START
-        end = DE421_END
+        start = self.window_start
+        end = self.window_end
         step_days = max(1, int(step_days))
-        bodies = bodies or tuple(self.rates_deg_per_day.keys())
 
         # Build uniform sample grid inclusive of end
         ts: List[datetime] = []
@@ -330,7 +742,7 @@ class AetherField:
         ts.append(end)
 
         created: Dict[str, int] = {}
-        for b in bodies:
+        for b in canonical_bodies:
             # Gather longitudes and unwrap
             longs = [fetch_celestial_data(ti, b) for ti in ts]
             unwrapped = [longs[0]]
@@ -354,23 +766,69 @@ class AetherField:
 
         return created
 
+
     def longitude_piecewise(self, dt: Any, body: str, anchor_mode: str = 'end') -> float:
         """
-        Estimate ecliptic longitude using piecewise linear drift if available.
-        - Inside de421: use the segment covering dt (linearized Skyfield).
-        - Outside de421: extend from the nearest boundary using the boundary segment slope.
+        Estimate ecliptic longitude using piecewise linear drift if available.  
+        - Inside ephemeris window: use the segment covering dt (linearized Skyfield).
+        - Outside window: extend from the nearest boundary using the boundary segment slope.
 
-        anchor_mode: 'start' | 'end' | 'nearest' — only used outside-range.
+        anchor_mode: 'start' | 'end' | 'nearest' - only used outside-range.     
         """
-        dt = _as_datetime(dt)
-        dt = dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-        segs = self.piecewise.get(body)
+        body_key = _canonical_body(body)
+        dt_value = dt if _is_skyfield_time(dt) else _as_datetime(dt)
+        if not _is_skyfield_time(dt_value):
+            dt_value = _ensure_utc_datetime(dt_value)
+        segs = self.piecewise.get(body_key)
         if not segs:
             # No segments; fallback to simple model
-            return self.longitude(dt, body)
+            return self.longitude(dt_value, body_key)
+
+        if _is_skyfield_time(dt_value):
+            if not SKYFIELD_OK:
+                raise RuntimeError("Skyfield not available for time math")
+            ts = getattr(dt_value, "ts", None) or _get_timescale()
+            dt_tt = float(dt_value.tt)
+            win_start_tt = float(ts.from_datetime(_ensure_utc_datetime(self.window_start)).tt)
+            win_end_tt = float(ts.from_datetime(_ensure_utc_datetime(self.window_end)).tt)
+
+            # Inside range: choose segment spanning dt
+            if win_start_tt <= dt_tt <= win_end_tt:
+                for s in segs:
+                    s_start_tt = float(ts.from_datetime(_ensure_utc_datetime(s.start)).tt)
+                    s_end_tt = float(ts.from_datetime(_ensure_utc_datetime(s.end)).tt)
+                    if s_start_tt <= dt_tt <= s_end_tt:
+                        days = dt_tt - s_start_tt
+                        return (s.lon0_unwrapped + s.slope_deg_per_day * days) % 360.0
+                # Edge case: dt at exact end
+                s = segs[-1]
+                s_start_tt = float(ts.from_datetime(_ensure_utc_datetime(s.start)).tt)
+                days = dt_tt - s_start_tt
+                return (s.lon0_unwrapped + s.slope_deg_per_day * days) % 360.0
+
+            # Outside range: pick boundary and extend with boundary slope
+            if anchor_mode == 'nearest':
+                d_start = abs(dt_tt - win_start_tt)
+                d_end = abs(win_end_tt - dt_tt)
+                anchor_mode = 'start' if d_start < d_end else 'end'
+
+            if anchor_mode == 'start':
+                s0 = next((s for s in segs if s.start == self.window_start), segs[0])
+                s0_start_tt = float(ts.from_datetime(_ensure_utc_datetime(s0.start)).tt)
+                days = dt_tt - s0_start_tt
+                return (s0.lon0_unwrapped + s0.slope_deg_per_day * days) % 360.0
+
+            s1 = next((s for s in segs if s.end == self.window_end), segs[-1])
+            s1_start_tt = float(ts.from_datetime(_ensure_utc_datetime(s1.start)).tt)
+            s1_end_tt = float(ts.from_datetime(_ensure_utc_datetime(s1.end)).tt)
+            seg_days = s1_end_tt - s1_start_tt
+            lon_end_unwrapped = s1.lon0_unwrapped + s1.slope_deg_per_day * seg_days
+            days_after = dt_tt - s1_end_tt
+            return (lon_end_unwrapped + s1.slope_deg_per_day * days_after) % 360.0
 
         # Inside range: choose segment spanning dt
-        if DE421_START <= dt <= DE421_END:
+        dt = dt_value
+        if self.window_start <= dt <= self.window_end:
             for s in segs:
                 if s.start <= dt <= s.end:
                     days = (dt - s.start).total_seconds() / 86400.0
@@ -382,29 +840,26 @@ class AetherField:
 
         # Outside range: pick boundary and extend with boundary slope
         if anchor_mode == 'nearest':
-            d_start = abs((dt - DE421_START).total_seconds())
-            d_end = abs((DE421_END - dt).total_seconds())
+            d_start = abs((dt - self.window_start).total_seconds())
+            d_end = abs((self.window_end - dt).total_seconds())
             anchor_mode = 'start' if d_start < d_end else 'end'
 
         if anchor_mode == 'start':
-            s0 = next((s for s in segs if s.start == DE421_START), segs[0])
-            days = _days_between(DE421_START, dt)
+            s0 = next((s for s in segs if s.start == self.window_start), segs[0])
+            days = _days_between(self.window_start, dt)
             return (s0.lon0_unwrapped + s0.slope_deg_per_day * days) % 360.0
         else:
-            s1 = next((s for s in segs if s.end == DE421_END), segs[-1])
-            days = _days_between(DE421_END, dt)
+            s1 = next((s for s in segs if s.end == self.window_end), segs[-1])
+            days = _days_between(self.window_end, dt)
             return (s1.lon0_unwrapped + s1.slope_deg_per_day * days) % 360.0
 
     def sign(self, dt: Any, body: str) -> str:
         lon = self.longitude(dt, body)
-        return get_zodiac_by_longitude(lon)
+        return get_zodiac_by_longitude_dt(lon, dt)
 
-    def alignments(self, dt: Any) -> Dict[str, str]:
-        bodies = [
-            'sun', 'moon', 'mercury', 'venus', 'mars',
-            'jupiter', 'saturn', 'uranus', 'neptune', 'pluto',
-        ]
-        return {b: self.sign(dt, b) for b in bodies}
+    def alignments(self, dt: Any, include_nodes: bool = True) -> Dict[str, str]:
+        targets = ALIGNMENT_BODIES if include_nodes else PLANET_ALIGNMENT_BODIES
+        return {b: self.sign(dt, b) for b in targets}
 
     def fit_rates(self, window_days: int = 365, step_days: int = 30) -> Dict[str, float]:
         """
@@ -415,14 +870,17 @@ class AetherField:
         if not SKYFIELD_OK:
             return self.rates_deg_per_day
 
-        start = max(DE421_START, datetime(2000, 1, 1, tzinfo=UTC))
-        bodies = list(self.rates_deg_per_day.keys())
+        start = max(self.window_start, datetime(2000, 1, 1, tzinfo=UTC))
+        raw_bodies = list(self.rates_deg_per_day.keys())
+        canonical_bodies = list(dict.fromkeys(_canonical_body(b) for b in raw_bodies if _canonical_body(b)))
         ts = [start + timedelta(days=i) for i in range(0, window_days + 1, max(1, step_days))]
 
         new_rates: Dict[str, float] = {}
-        for b in bodies:
-            # Use Skyfield samples directly for calibration
-            longs = [fetch_celestial_data(t, b) for t in ts]
+        for b in canonical_bodies:
+            try:
+                longs = [fetch_celestial_data(t, b) for t in ts]
+            except Exception:
+                continue
             # Unwrap angles to avoid 360 jumps
             unwrapped = [longs[0]]
             for i in range(1, len(longs)):
@@ -431,32 +889,36 @@ class AetherField:
                 delta = (cur - prev + 540.0) % 360.0 - 180.0
                 unwrapped.append(prev + delta)
             total_days = (ts[-1] - ts[0]).total_seconds() / 86400.0
-            slope = (unwrapped[-1] - unwrapped[0]) / total_days if total_days else self.rates_deg_per_day[b]
+            default_rate = self.rates_deg_per_day.get(b, DRACONIC_RATE_DEG_PER_DAY if b in DRACONIC_BODY_NAMES else 0.0)
+            slope = (unwrapped[-1] - unwrapped[0]) / total_days if total_days else default_rate
             new_rates[b] = slope
         self.rates_deg_per_day.update(new_rates)
         return self.rates_deg_per_day
 
+
     # --- Calibration helpers ---
     def calibrate(self, window_days: int = 365, step_days: int = 30, bodies: Optional[Tuple[str, ...]] = None, piecewise: bool = False) -> Dict[str, Dict[str, float]]:
         """
-        Learn from Skyfield within de421 by anchoring and re-fitting drift rates.
+        Learn from Skyfield within the ephemeris window by anchoring and re-fitting drift rates.
 
-        - Ensures anchors at both de421 boundaries for the selected bodies.
+        - Ensures anchors at both window boundaries for the selected bodies.
         - Fits average drift rates using in-range Skyfield samples.
 
         Returns a summary dict with 'rates', 'anchors_min', 'anchors_max'.
         """
-        bodies = bodies or tuple(self.rates_deg_per_day.keys())
-        for b in bodies:
+        raw_bodies = bodies or tuple(self.rates_deg_per_day.keys())
+        canonical_bodies = tuple(dict.fromkeys(_canonical_body(b) for b in raw_bodies if _canonical_body(b)))
+        for b in canonical_bodies:
             self._ensure_anchor(b, use_skyfield=True)
         self.fit_rates(window_days=window_days, step_days=step_days)
         if piecewise:
-            self.fit_piecewise(step_days=step_days, bodies=bodies)
+            self.fit_piecewise(step_days=step_days, bodies=canonical_bodies)
         return {
             'rates': dict(self.rates_deg_per_day),
             'anchors_min': dict(self.anchors_min),
             'anchors_max': dict(self.anchors_max),
         }
+
 
     def save_calibration(self, path: str) -> None:
         """Persist current rates, anchors, and piecewise segments to JSON."""
@@ -471,12 +933,21 @@ class AetherField:
                 }
                 for s in segs
             ]
+        ephemeris_name = self.ephemeris_name or EPHEMERIS_NAME
+        ephemeris_path = self.ephemeris_path or EPHEMERIS_PATH
+        spec = EPHEMERIS_SPECS.get((ephemeris_name or "").lower())
         payload = {
             'rates_deg_per_day': self.rates_deg_per_day,
             'anchors_min': self.anchors_min,
             'anchors_max': self.anchors_max,
-            'de421_start': DE421_START.isoformat(),
-            'de421_end': DE421_END.isoformat(),
+            'ephemeris_name': ephemeris_name,
+            'ephemeris_path': ephemeris_path,
+            'ephemeris_start': self.window_start.isoformat(),
+            'ephemeris_end': self.window_end.isoformat(),
+            'ephemeris_true_start_year': spec.true_start_year if spec else None,
+            'ephemeris_true_end_year': spec.true_end_year if spec else None,
+            'de421_start': self.window_start.isoformat(),
+            'de421_end': self.window_end.isoformat(),
             'piecewise': pw,
         }
         with open(path, 'w', encoding='utf-8') as f:
@@ -484,7 +955,7 @@ class AetherField:
 
     @classmethod
     def load_calibration(cls, path: str) -> 'AetherField':
-        """Load rates, anchors, and piecewise segments from a JSON file."""
+        """Load rates, anchors, and piecewise segments from a JSON file."""     
         if not os.getenv("AETHER_CAL_FILE", False):
             CACHE_PATH = os.path.join(os.path.expanduser("~"), ".cache", "aetherfield", "aetherfield_calibration.json")
             REMOTE_URL = "https://pythoness.duckdns.org/v1/aether/calibration/file"
@@ -493,7 +964,7 @@ class AetherField:
             if os.path.exists(CACHE_PATH):
                 try:
                     with open(CACHE_PATH, "r", encoding="utf-8") as f:
-                        return json.load(f)
+                        data = json.load(f)
                 except Exception:
                     pass
 
@@ -517,10 +988,39 @@ class AetherField:
             
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-        rates = data.get('rates_deg_per_day') or data.get('rates') or {}
+        rates = data.get('rates_deg_per_day') or data.get('rates') or {}        
         anchors_min = data.get('anchors_min') or {}
         anchors_max = data.get('anchors_max') or {}
-        inst = cls(rates_deg_per_day=rates, anchors_min=anchors_min, anchors_max=anchors_max)
+        def _parse_window_dt(value: Optional[str], fallback: datetime) -> datetime:
+            if not value:
+                return fallback
+            try:
+                parsed = datetime.fromisoformat(value)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=UTC)
+                return parsed.astimezone(UTC)
+            except Exception:
+                return fallback
+
+        window_start = _parse_window_dt(
+            data.get('ephemeris_start') or data.get('calibration_start') or data.get('de421_start'),
+            EPHEMERIS_START,
+        )
+        window_end = _parse_window_dt(
+            data.get('ephemeris_end') or data.get('calibration_end') or data.get('de421_end'),
+            EPHEMERIS_END,
+        )
+        ephemeris_name = data.get('ephemeris_name')
+        ephemeris_path = data.get('ephemeris_path')
+        inst = cls(
+            rates_deg_per_day=rates,
+            anchors_min=anchors_min,
+            anchors_max=anchors_max,
+            window_start=window_start,
+            window_end=window_end,
+            ephemeris_name=ephemeris_name,
+            ephemeris_path=ephemeris_path,
+        )
         piecewise_data = data.get('piecewise') or {}
         pw: Dict[str, List[DriftSegment]] = {}
         for b, segs in piecewise_data.items():
@@ -546,53 +1046,83 @@ class AetherField:
 _GLOBAL_AETHER = AetherField()
 _CAL_LOADED = False
 if not _CAL_LOADED:
-    try:
-        # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-        _CAL_LOADED = True
-    except Exception:
-        pass
+    # allow override via env var if you want
+    cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+    _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+    _CAL_LOADED = True
 
 def aether_alignments(dt: Optional[Any] = None) -> Dict[str, str]:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
-        try:
+        # allow override via env var if you want
+        cal_path = os.getenv('AETHER_CAL_FILE', 'aetherfield_calibration.json')
+        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+        _CAL_LOADED = True
 
-            # allow override via env var if you want
-            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-            _CAL_LOADED = True
-        except Exception:
-            pass    
     if dt is None:
         dt = datetime.now(UTC)
     return _GLOBAL_AETHER.alignments(dt)
 
 
+def aether_draconic_nodes(dt: Optional[Any] = None, include_altaz: bool = True) -> Dict[str, Dict[str, Any]]:
+    """Return draconic node longitudes, signs, and optional alt/az snapshot."""
+    if dt is None:
+        dt_value = datetime.now(UTC)
+    else:
+        dt_value = _as_datetime(dt)
+        dt_value = dt_value if dt_value.tzinfo else dt_value.replace(tzinfo=UTC)
+    longs = _get_draconic_longitudes(dt_value)
+    result: Dict[str, Dict[str, Any]] = {}
+    for key, lon in longs.items():
+        result[key] = {
+            'longitude': lon,
+            'sign': get_zodiac_by_longitude_dt(lon, dt),
+        }
+
+    if include_altaz and dt is None and SKYFIELD_OK:
+        module = _import_skyfieldcomm()
+        getter = getattr(module, 'get_draconic_nodes_alt_az', None) if module is not None else None
+        if callable(getter):
+            zone = os.getenv('TZ') or 'UTC'
+            coords = os.getenv('DEFAULT_COORDS') or '0,0'
+            try:
+                altaz = getter(zone=zone, coords=coords)
+            except Exception:
+                altaz = None
+            if isinstance(altaz, dict):
+                for label, info in altaz.items():
+                    canon = _canonical_body(label)
+                    if canon in result:
+                        try:
+                            altitude = info.get('altitude')
+                            azimuth = info.get('azimuth')
+                            result[canon]['is_up'] = bool(info.get('is_up'))
+                            result[canon]['altitude'] = float(altitude) if altitude is not None else None
+                            result[canon]['azimuth'] = float(azimuth) if azimuth is not None else None
+                        except Exception:
+                            continue
+    return result
+
+
 def aether_longitude(dt: Any, body: str) -> float:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
-        try:
-            # allow override via env var if you want
-            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-            _CAL_LOADED = True
-        except Exception:
-            pass   
+        # allow override via env var if you want
+        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+        _CAL_LOADED = True
+        
     return _GLOBAL_AETHER.longitude(dt, body)
 
 
 def aether_sign(dt: Any, body: str) -> str:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
-        try:
-            # allow override via env var if you want
-            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-            _CAL_LOADED = True
-        except Exception:
-            pass   
+        # allow override via env var if you want
+        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+        _CAL_LOADED = True
+        
     return _GLOBAL_AETHER.sign(dt, body)
 
 
@@ -614,13 +1144,10 @@ def aetherium_longitude_mt(mt: Any, body: str) -> float:
         _GLOBAL_AETHER = AetherField()  # base instance
 
     if not _CAL_LOADED:
-        try:
-            # allow override via env var if you want
-            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-            _CAL_LOADED = True
-        except Exception:
-            pass 
+        # allow override via env var if you want
+        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+        _CAL_LOADED = True
 
     return _GLOBAL_AETHER.longitude(mt, body)
 
@@ -669,10 +1196,13 @@ def moon_phase(dt: Any):
 # --- Sunrise/Sunset estimation (no Skyfield) ---------------------------------
 def _get_pytz_timezone(zone):
     try:
-        if hasattr(zone, "localize"):
+        if hasattr(zone, "localize") or hasattr(zone, "utcoffset"):
             return zone
         if isinstance(zone, str) and zone:
-            return pytz.timezone(zone)
+            if pytz:
+                return pytz.timezone(zone)
+            if ZoneInfo is not None:
+                return ZoneInfo(zone)
     except Exception:
         pass
     return UTC
@@ -717,7 +1247,11 @@ def sunrise_sunset(zone, coords: str, date=None, depression_deg: float = -0.833)
     eot_min = 9.87 * math.sin(2 * B) - 7.53 * math.cos(B) - 1.5 * math.sin(B)
 
     # Timezone offset (hours) at local noon
-    local_noon_base = tz.localize(datetime(base_day.year, base_day.month, base_day.day, 12, 0, 0))
+    noon_dt = datetime(base_day.year, base_day.month, base_day.day, 12, 0, 0)
+    if hasattr(tz, "localize"):
+        local_noon_base = tz.localize(noon_dt)
+    else:
+        local_noon_base = noon_dt.replace(tzinfo=tz)
     tz_offset_hours = (local_noon_base.utcoffset() or timedelta(0)).total_seconds() / 3600.0
     lstm = 15.0 * tz_offset_hours
     offset_min = eot_min + 4.0 * (lon_deg - lstm)
@@ -772,13 +1306,10 @@ def ae_is_up(dt, body: str, coords: (float, float) = None, method: str = "full",
         _GLOBAL_AETHER = AetherField()  # base instance
 
     if not _CAL_LOADED:
-        try:
-            # allow override via env var if you want
-            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-            _CAL_LOADED = True
-        except Exception:
-            pass 
+        # allow override via env var if you want
+        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+        _CAL_LOADED = True
     lat_deg, lon_deg = map(float, coords.split(','))
 
     # Ecliptic longitudes from your model
