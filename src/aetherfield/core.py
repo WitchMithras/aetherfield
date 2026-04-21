@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # --- aetherfield: is_up utilities -------------------------------------------
 import math
 from datetime import timezone
-from iplocal import get_ip_data
+from .iplocal import get_ip_data
 
 
 # Mean obliquity (degrees). You can make this tunable from your calibration file if you want.
@@ -516,19 +516,25 @@ class AetherField:
 _GLOBAL_AETHER = AetherField()
 _CAL_LOADED = False
 if not _CAL_LOADED:
-    # allow override via env var if you want
-    cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-    _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-    _CAL_LOADED = True
-
-def aether_alignments(dt: Optional[Any] = None) -> Dict[str, str]:
-    global _GLOBAL_AETHER, _CAL_LOADED
-    if not _CAL_LOADED:
+    try:
         # allow override via env var if you want
         cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
-        
+    except Exception:
+        pass
+
+def aether_alignments(dt: Optional[Any] = None) -> Dict[str, str]:
+    global _GLOBAL_AETHER, _CAL_LOADED
+    if not _CAL_LOADED:
+        try:
+
+            # allow override via env var if you want
+            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+            _CAL_LOADED = True
+        except Exception:
+            pass    
     if dt is None:
         dt = datetime.now(UTC)
     return _GLOBAL_AETHER.alignments(dt)
@@ -537,22 +543,26 @@ def aether_alignments(dt: Optional[Any] = None) -> Dict[str, str]:
 def aether_longitude(dt: Any, body: str) -> float:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
-        # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-        _CAL_LOADED = True
-        
+        try:
+            # allow override via env var if you want
+            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+            _CAL_LOADED = True
+        except Exception:
+            pass   
     return _GLOBAL_AETHER.longitude(dt, body)
 
 
 def aether_sign(dt: Any, body: str) -> str:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
-        # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-        _CAL_LOADED = True
-        
+        try:
+            # allow override via env var if you want
+            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+            _CAL_LOADED = True
+        except Exception:
+            pass   
     return _GLOBAL_AETHER.sign(dt, body)
 
 
@@ -574,10 +584,13 @@ def aetherium_longitude_mt(mt: Any, body: str) -> float:
         _GLOBAL_AETHER = AetherField()  # base instance
 
     if not _CAL_LOADED:
-        # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-        _CAL_LOADED = True
+        try:
+            # allow override via env var if you want
+            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+            _CAL_LOADED = True
+        except Exception:
+            pass 
 
     return _GLOBAL_AETHER.longitude(mt, body)
 
@@ -729,10 +742,13 @@ def ae_is_up(dt, body: str, coords: (float, float) = None, method: str = "full",
         _GLOBAL_AETHER = AetherField()  # base instance
 
     if not _CAL_LOADED:
-        # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
-        _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
-        _CAL_LOADED = True
+        try:
+            # allow override via env var if you want
+            cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+            _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+            _CAL_LOADED = True
+        except Exception:
+            pass 
     lat_deg, lon_deg = map(float, coords.split(','))
 
     # Ecliptic longitudes from your model
