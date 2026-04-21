@@ -36,8 +36,11 @@ from .core import (
 __all__ = [
     "OBLIQUITY_DEG",
     "aether_longitude",
+    "aether_longitude_mt",
+    "aetherium_longitude_mt",
     "aether_sign",
     "aether_alignments",
+    "aether_alignments_mt",
     "moon_phase",
     "ecliptic_to_equatorial",
     "sunrise_sunset",
