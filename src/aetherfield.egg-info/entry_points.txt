@@ -1,4 +1,0 @@
-[console_scripts]
-aetherfield-benchmark = aetherfield.cli.benchmark:main
-aetherfield-calibrate-all = aetherfield.cli.calibrate_all:main
-aetherfield-compare = aetherfield.cli.compare:main

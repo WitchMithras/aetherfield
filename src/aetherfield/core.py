@@ -40,6 +40,8 @@ AGE_LENGTH = 2147.67
 ANCHOR_YEAR = 1
 ANCHOR_SIGN = "Pisces"
 
+load_dotenv()
+
 def _wrap_deg(x: float) -> float:
     return x % 360.0
 
@@ -156,7 +158,6 @@ def _lst_deg(dt, lon_deg):
     return (_gmst_deg(dt) + lon_deg) % 360.0
 
 
-load_dotenv()
 
 try:
     import pytz
@@ -219,8 +220,8 @@ except Exception:
 
 DE421_START = datetime(1951, 1, 1, tzinfo=UTC)
 DE421_END = datetime(2050, 12, 31, 23, 59, 59, tzinfo=UTC)
-DE400_START = datetime(1550, 1, 1, tzinfo=UTC)
-DE400_END = datetime(2650, 12, 31, 23, 59, 59, tzinfo=UTC)
+DE440_START = datetime(1550, 1, 1, tzinfo=UTC)
+DE440_END = datetime(2650, 12, 31, 23, 59, 59, tzinfo=UTC)
 # DE441 spans beyond Python's datetime range; clamp to supported bounds.
 DE441_START = datetime(1, 1, 1, tzinfo=UTC)
 DE441_END = datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC)
@@ -235,16 +236,6 @@ class EphemerisSpec:
     true_start_year: int
     true_end_year: int
 
-
-_DE440_SPEC = EphemerisSpec(
-    name="de440",
-    filename="de440.bsp",
-    start=DE400_START,
-    end=DE400_END,
-    true_start_year=1550,
-    true_end_year=2650,
-)
-
 EPHEMERIS_SPECS: Dict[str, EphemerisSpec] = {
     "de421": EphemerisSpec(
         name="de421",
@@ -254,8 +245,14 @@ EPHEMERIS_SPECS: Dict[str, EphemerisSpec] = {
         true_start_year=1951,
         true_end_year=2050,
     ),
-    "de440": _DE440_SPEC,
-    "de400": _DE440_SPEC,  # alias for de440
+    "de440": EphemerisSpec(
+        name="de440",
+        filename="de440.bsp",
+        start=DE440_START,
+        end=DE440_END,
+        true_start_year=1550,
+        true_end_year=2650,
+    ),
     "de441": EphemerisSpec(
         name="de441",
         filename="de441.bsp",
@@ -318,6 +315,13 @@ def _select_calibration_ephemeris() -> Tuple[EphemerisSpec, Optional[Path]]:
             return spec, path
     return EPHEMERIS_SPECS["de421"], _resolve_ephemeris_path("de421.bsp")
 
+def resolve_ephemeris(year: int):
+    if 1950 <= year <= 2050:
+        return "de421"
+    elif 1550 <= year <= 2650:
+        return "de440"
+    else:
+        return "de441"
 
 _CAL_EPHEMERIS_SPEC, _CAL_EPHEMERIS_PATH = _select_calibration_ephemeris()
 EPHEMERIS_NAME = _CAL_EPHEMERIS_SPEC.name
@@ -943,14 +947,14 @@ class AetherField:
             'rates_deg_per_day': self.rates_deg_per_day,
             'anchors_min': self.anchors_min,
             'anchors_max': self.anchors_max,
-            'ephemeris_name': ephemeris_name,
-            'ephemeris_path': ephemeris_path,
+            #'ephemeris_name': ephemeris_name,
+            #'ephemeris_path': ephemeris_path,
             'ephemeris_start': self.window_start.isoformat(),
             'ephemeris_end': self.window_end.isoformat(),
             'ephemeris_true_start_year': spec.true_start_year if spec else None,
             'ephemeris_true_end_year': spec.true_end_year if spec else None,
-            'de421_start': self.window_start.isoformat(),
-            'de421_end': self.window_end.isoformat(),
+            #'de421_start': self.window_start.isoformat(),
+            #'de421_end': self.window_end.isoformat(),
             'piecewise': pw,
         }
         with open(path, 'w', encoding='utf-8') as f:
