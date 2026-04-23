@@ -1362,3 +1362,6 @@ def summarize_is_up(dt, bodies=bodies):
         out[b.title()] = {"is_up": bool(is_up), "altitude": altitude}
     return out
 
+def aetherfield():
+    """Convenience function returning a AetherField for the given request."""
+    return AetherField()

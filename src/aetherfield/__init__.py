@@ -30,7 +30,8 @@ from .core import (
     get_body_key,
     ae_is_up,
     summarize_is_up,
-    OBLIQUITY_DEG
+    OBLIQUITY_DEG,
+    aetherfield
 )
 
 __all__ = [
@@ -57,4 +58,5 @@ __all__ = [
     "get_body_key",
     "ae_is_up",
     "summarize_is_up",
+    "aetherfield"
 ]

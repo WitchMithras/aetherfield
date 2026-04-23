@@ -2,15 +2,12 @@ import requests
 from datetime import datetime
 import pytz
 
-# Define the API URL and default values
 API_URL = "http://ip-api.com/json"
-default_coords = "37.2400, 25.1603"
-default_zone = 'EET'
+default_coords = "37.2400, 25.1603" # Greece
+default_zone = 'EET' # East Europe
 default_tz = "+2"  # Default timezone offset as string
 
 def get_ip_data():
-    # Temporary bypass
-    return default_coords, default_zone, default_tz
 
     try:
         response = requests.get(API_URL, timeout=5)
@@ -46,8 +43,8 @@ def calculate_utc_offset(tz_name):
         print(f"Error calculating offset: {e}")
         return default_tz  # Return default in case of error
 
-# Usage
-#coords, zone, tz_offset = get_ip_data()
-#print(f"Coordinates: {coords}")
-#print(f"Zone: {zone}")
-#print(f"UTC Offset: {tz_offset}")
+if __name__ == "__main__":
+    coords, zone, tz_offset = get_ip_data()
+    print(f"Coordinates: {coords}")
+    print(f"Zone: {zone}")
+    print(f"UTC Offset: {tz_offset}")
