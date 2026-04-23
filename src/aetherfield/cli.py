@@ -225,10 +225,7 @@ class CompareResult:
     body: str
     dt: Any
     lon: float
-    #skyfield_lon: Optional[float]
-    #delta_deg: Optional[float]
     sign: str
-    #skyfield_sign: Optional[str]
 
 
 def _drift_longitude(a: af.AetherField, dt: Any, body: str, anchor_mode: str = 'end') -> float:
@@ -249,7 +246,6 @@ def _drift_longitude(a: af.AetherField, dt: Any, body: str, anchor_mode: str = '
 
 
 def compare_once(a: af.AetherField, body: str, dt: Any, force_aether: bool = False, fit_rates: bool = False) -> CompareResult:
-    #a = af.AetherField()
     if fit_rates:
         try:
             a.fit_rates()
@@ -257,18 +253,8 @@ def compare_once(a: af.AetherField, body: str, dt: Any, force_aether: bool = Fal
             pass
     sky_lon: Optional[float] = None
     sky_sign: Optional[str] = None
-    if force_aether:
-        aether_lon = a.longitude(dt, body)
-        aether_sign = a.sign(dt, body)
-    else:
-        aether_lon = _drift_longitude(a, dt, body)
-        aether_sign = af.get_zodiac_by_longitude(aether_lon)
-        if af.in_ephemeris_window(dt):
-            try:
-                sky_lon = sf_ecliptic_longitude(dt, body)
-                sky_sign = af.get_zodiac_by_longitude(sky_lon)
-            except Exception:
-                pass
+    aether_lon = a.longitude(dt, body)
+    aether_sign = a.sign(dt, body)
 
     delta = wrap_delta_deg(aether_lon, sky_lon) if sky_lon is not None else None
     return CompareResult(body, dt, aether_lon, aether_sign)
@@ -278,16 +264,10 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Compare AetherField with Skyfield for a single timestamp.")
     p.add_argument('--body', required=True, help='Body (sun, moon, mercury, ... pluto)')
     p.add_argument('--dt', default=None, help='ISO8601 datetime (UTC).')
-    p.add_argument('--moontime', default=None, help='MoonTime string (mt:...)')
+    p.add_argument('--mt', default=None, help='MoonTime string (mt:...)')
     p.add_argument('--sf', default=None, help='Skyfield time with astronomical year numbering (ISO 8601 YYYY-MM-DD[THH[:MM[:SS]][Z|+HH:MM]] or YEAR,MONTH,DAY). Overrides --dt/--moontime.')
-    p.add_argument('--force-aether', action='store_true', help='Use AetherField-only (drift).')
-    p.add_argument('--fit-rates', action='store_true', help='Fit mean drift from in-range samples.')
-    p.add_argument('--calibrate', action='store_true', help='Ensure anchors and piecewise segments (no-ops if present).')
-    p.add_argument('--save-calibration', default=None, help='Save calibration JSON path.')
     p.add_argument('--load-calibration', default=None, help='Load calibration JSON path.')
     p.add_argument('--drift-anchor', choices=['start','end','nearest'], default='end', help='Anchor for drift only mode.')
-    p.add_argument('--piecewise', action='store_true', help='Use piecewise segments when forcing aether.')
-    p.add_argument('--piecewise-step', type=int, default=30, help='Step in days for piecewise building.')
     p.add_argument('--json', action='store_true', help='Emit JSON instead of text.')
     args = p.parse_args(argv)
 
@@ -300,7 +280,7 @@ def main(argv=None) -> int:
         if dt is None:
             p.error("Invalid --sf value")
     else:
-        dt = parse_moontime(args.moontime) or parse_dt(args.dt)
+        dt = parse_moontime(args.mt) or parse_dt(args.dt)
 
     if args.load_calibration:
         try:
@@ -314,41 +294,20 @@ def main(argv=None) -> int:
         except Exception:
             # Fallback
             a = af.AetherField()
-    if args.fit_rates:
-        try:
-            a.fit_rates()
-        except Exception:
-            pass
-    if args.calibrate:
-        try:
-            if args.piecewise:
-                a.fit_piecewise(step_days=int(args.piecewise_step), bodies=(body,))
-        except Exception:
-            pass
-    if args.save_calibration:
-        try:
-            a.save_calibration(args.save_calibration)
-        except Exception:
-            pass
 
-    res = compare_once(a, body, dt, force_aether=True, fit_rates=args.fit_rates)
+    res = compare_once(a, body, dt, force_aether=True)
 
     if args.json:
         import json
         print(json.dumps({
             'body': res.body,
             'dt': format_time_label(res.dt),
-            'lon': res.aether_lon,
-            #'skyfield_lon': res.skyfield_lon,
-            #'delta_deg': res.delta_deg,
-            'sign': res.aether_sign,
-            #'skyfield_sign': res.skyfield_sign,
+            'lon': res.lon,
+            'sign': res.sign,
         }, indent=2))
     else:
         print(f"{res.body} @ {format_time_label(res.dt)}\n"
               f"  Aether:   {res.lon:8.3f} deg  ({res.sign})")
-              #f"  Skyfield: {'n/a' if res.skyfield_lon is None else f'{res.skyfield_lon:8.3f} deg  ('+str(res.skyfield_sign)+')'}\n"
-              #f"  Delta:    {'n/a' if res.delta_deg is None else f'{res.delta_deg:+.3f} deg'}")
     return 0
 
 
