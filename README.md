@@ -1,27 +1,256 @@
-AeTherField Staging
-===================
+# AetherField
 
-This folder stages a future standalone package for AetherField — a Skyfield-free
-runtime ephemeris model that uses learned calibration/piecewise drift and offers
-simple APIs for signs, longitudes, alignments, phases, and (now) sunrise/sunset
-estimation.
+*AetherField* is a lightweight, modular system for computing astrological positions, signs, and alignments across multiple time representations. This is meant to replace the frozen or outdated zodiac libraries, with a dynamic stellar gazing tool.
 
-Plan
-- Extract reusable runtime core from the root `aetherfield.py`.
-- Preserve public APIs: `aether_longitude`, `aether_sign`, `aether_alignments`, `moon_phase`.
-- Add `sunrise_sunset(zone, coords, date, depression_deg)` for Moontime temporal hours.
-- Keep calibration loaders and CLI tools in a tools subpackage.
- - Console scripts (staging): `aetherfield-compare`, `aetherfield-benchmark`, `aetherfield-calibrate-all`.
+It is designed to sit cleanly on top of my own temporal layer `moontime` while remaining flexible enough to integrate with external systems such as Skyfield.
 
-Local Layout (staging)
-- `src/aetherfield_pkg/` — package source (to be populated)
-- `pyproject.toml` — packaging config (setuptools)
+At its core, AetherField answers a simple question:
 
-Dev Tips
-- Create a venv and install local deps from the project root as usual.
-- In staging, the package may re-export from the root `aetherfield.py` to avoid duplication.
+> *Given a moment in time, where are the bodies — and what do they mean?*
 
-CLI Usage (staging)
-- Compare a single timestamp: `python -m aetherfield_pkg.cli.compare --body mars --dt 2025-06-21T12:00:00Z`
-- Benchmark a range: `python -m aetherfield_pkg.cli.benchmark --start 2001-01-01T00:00:00Z --end 2001-12-31T00:00:00Z`
-- Calibrate all: `python -m aetherfield_pkg.cli.calibrate_all --out aetherfield_calibration.json`
+---
+
+## ✨ Features
+
+* 🌌 Compute zodiac signs for planetary bodies
+* 🔭 Support for multiple time inputs:
+
+  * `datetime`
+  * `MoonTime`
+  * Skyfield `Time`
+* 🧭 Longitude calculations (tropical + draconic)
+* 🧬 Calibration system:
+
+  * No calibration (pure baseline)
+  * Local calibration (user-defined)
+  * Hosted calibration (auto-fetched)
+* 🖥️ CLI interface with automatic calibration
+
+---
+
+## 📦 Installation
+
+```bash
+pip install aetherfield
+```
+
+---
+
+## 🚀 Quick Example
+
+```python
+from aetherfield import AetherField as af
+
+def example():
+    from skyfield.api import load
+    from datetime import datetime, timezone
+    from moontime import MoonTime
+
+    dt = datetime.now(timezone.utc)
+    
+    a = af()  # No calibration
+    b = af.load_calibration(caled)  # Local calibration
+    c = af.load_calibration('AetherField')  # Hosted calibration
+
+    print("No calibration:", a.sign(dt=dt, body="sun"))
+    print("Local calibration:", b.sign(dt=dt, body="sun"))
+    print("Hosted calibration:", c.sign(dt=dt, body="sun"))
+
+    print("Full suite:", c.alignments(dt=dt))
+    
+    ts = load.timescale()
+    sf = ts.from_datetime(dt)
+
+    print("From skyfield time:", c.sign(dt=sf, body="sun"))
+
+    mt = MoonTime.from_datetime(dt)
+
+    print("From moontime:", c.sign(dt=mt, body="sun"))
+
+    print("Longitude:", c.longitude(dt=mt, body="sun"))
+    print("Draconic:", c.longitude(dt=mt, body="ascending_node"))
+
+if __name__ == "__main__":
+    example()
+```
+
+### Example Output
+
+```
+No calibration: Gemini
+Local calibration: Aries
+Hosted calibration: Aries
+
+Full suite: {
+  'sun': 'Aries',
+  'moon': 'Gemini',
+  'mercury': 'Pisces',
+  'venus': 'Aries',
+  'mars': 'Pisces',
+  'jupiter': 'Gemini',
+  'saturn': 'Pisces',
+  'uranus': 'Aries',
+  'neptune': 'Pisces',
+  'pluto': 'Capricorn',
+  'ascending_node': 'Aquarius',
+  'descending_node': 'Leo'
+}
+
+From skyfield time: Aries
+From moontime: Aries
+
+Longitude: 30.42190333085091
+Draconic: 336.2217926416203
+```
+
+---
+
+## 🧭 Core Concepts
+
+### AetherField Instance
+
+```python
+a = af()
+```
+
+Creates a baseline field with no calibration applied.
+
+---
+
+### Calibration
+
+Calibration adjusts how positions are interpreted.
+
+```python
+b = af.load_calibration("my_calibration.json")           # Local calibration
+c = af.load_calibration("AetherField")   # Hosted calibration
+```
+
+* **Local**: Your own dataset or tuning
+* **Hosted**: Pulled automatically from a remote source
+
+---
+
+### Sign Lookup
+
+```python
+c.sign(dt=dt, body="sun")
+```
+
+Returns the zodiac sign for a given celestial body.
+
+---
+
+### Full Alignment
+
+```python
+c.alignments(dt=dt)
+```
+
+Returns all tracked bodies in a single call.
+
+---
+
+### Longitude
+
+```python
+c.longitude(dt=dt, body="sun")
+```
+
+Returns the raw longitude in degrees.
+
+Supports:
+
+* Standard (tropical)
+* Draconic (nodes-based)
+
+---
+
+## ⏳ Time Input Flexibility
+
+AetherField accepts multiple time formats seamlessly:
+
+### Python `datetime`
+
+```python
+c.sign(dt=datetime.now(timezone.utc), body="sun")
+```
+
+### MoonTime
+
+```python
+mt = MoonTime.from_datetime(dt)
+c.sign(dt=mt, body="sun")
+```
+
+### Skyfield
+
+```python
+ts = load.timescale()
+sf = ts.from_datetime(dt)
+c.sign(dt=sf, body="sun")
+```
+
+---
+
+## 🖥️ CLI Usage
+
+AetherField includes a command-line interface.
+
+```bash
+aetherfield --body sun
+```
+
+### Example
+
+```
+sun @ 2026-04-23T02:05:39.166446+00:00
+  Aether:     30.398 deg  (Aries)
+```
+
+```bash
+aetherfield --body moon
+```
+
+```
+moon @ 2026-04-23T02:09:49.959350+00:00
+  Aether:    110.767 deg  (Gemini)
+```
+
+The CLI automatically pulls hosted calibration when available.
+
+---
+
+## 🧬 Design Philosophy
+
+AetherField is built to be:
+
+* **Composable** → Works with external time systems
+* **Deterministic** → Same input, same output
+* **Extensible** → Calibration layers evolve without breaking core logic
+* **Decoupled** → Time, data, and interpretation remain separate
+
+---
+
+## 🌙 Ecosystem
+
+AetherField pairs naturally with:
+
+* `moontime` → temporal framework
+* Skyfield → astronomical precision
+
+---
+
+## 🧪 Status
+
+Early release. Core systems are stable, but APIs may evolve as calibration and data layers expand.
+
+---
+
+## 🕯️ Closing Note
+
+AetherField doesn’t try to define meaning.
+
+It provides structure — positions, alignments, relationships.
+
+What you build on top of that… is entirely yours.

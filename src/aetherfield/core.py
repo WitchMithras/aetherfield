@@ -12,8 +12,6 @@ except Exception:
         return False
 from functools import lru_cache
 # --- aetherfield: is_up utilities -------------------------------------------
-import math
-from datetime import timezone
 try:
     from .iplocal import get_ip_data  # type: ignore
 except Exception:
