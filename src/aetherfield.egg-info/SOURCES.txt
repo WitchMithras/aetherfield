@@ -2,10 +2,12 @@ LICENSE
 README.md
 pyproject.toml
 src/aetherfield/__init__.py
+src/aetherfield/cli.py
 src/aetherfield/core.py
 src/aetherfield/iplocal.py
 src/aetherfield.egg-info/PKG-INFO
 src/aetherfield.egg-info/SOURCES.txt
 src/aetherfield.egg-info/dependency_links.txt
+src/aetherfield.egg-info/entry_points.txt
 src/aetherfield.egg-info/requires.txt
 src/aetherfield.egg-info/top_level.txt

@@ -34,11 +34,15 @@ SIGNS = [
     "Virgo", "Libra", "Scorpio", "Sagittarius",
     "Capricorn", "Aquarius", "Pisces"
 ]
+data = None
 
 AGE_LENGTH = 2147.67
 
 ANCHOR_YEAR = 1
 ANCHOR_SIGN = "Pisces"
+
+CACHE_PATH = os.path.join(os.path.expanduser("~"), ".cache", "aetherfield", "aetherfield_calibration.json")
+REMOTE_URL = "https://pythoness.duckdns.org/v1/aether/calibration/file"
 
 load_dotenv()
 
@@ -218,13 +222,13 @@ except Exception:
         return signs[i]
 
 
-DE421_START = datetime(1951, 1, 1, tzinfo=UTC)
-DE421_END = datetime(2050, 12, 31, 23, 59, 59, tzinfo=UTC)
-DE440_START = datetime(1550, 1, 1, tzinfo=UTC)
-DE440_END = datetime(2650, 12, 31, 23, 59, 59, tzinfo=UTC)
+DE421_START = datetime(1951, 1, 2, tzinfo=UTC)
+DE421_END = datetime(2049, 12, 30, 23, 59, 58, tzinfo=UTC)
+DE440_START = datetime(1551, 1, 2, tzinfo=UTC)
+DE440_END = datetime(2649, 12, 30, 23, 59, 58, tzinfo=UTC)
 # DE441 spans beyond Python's datetime range; clamp to supported bounds.
-DE441_START = datetime(1, 1, 1, tzinfo=UTC)
-DE441_END = datetime(9999, 12, 31, 23, 59, 59, tzinfo=UTC)
+DE441_START = datetime(1, 1, 2, tzinfo=UTC)
+DE441_END = datetime(9999, 12, 30, 23, 59, 58, tzinfo=UTC)
 
 
 @dataclass(frozen=True)
@@ -243,23 +247,23 @@ EPHEMERIS_SPECS: Dict[str, EphemerisSpec] = {
         start=DE421_START,
         end=DE421_END,
         true_start_year=1951,
-        true_end_year=2050,
+        true_end_year=2049,
     ),
     "de440": EphemerisSpec(
         name="de440",
         filename="de440.bsp",
         start=DE440_START,
         end=DE440_END,
-        true_start_year=1550,
-        true_end_year=2650,
+        true_start_year=1551,
+        true_end_year=2649,
     ),
     "de441": EphemerisSpec(
         name="de441",
         filename="de441.bsp",
         start=DE441_START,
         end=DE441_END,
-        true_start_year=-13200,
-        true_end_year=17191,
+        true_start_year=-13201,
+        true_end_year=17189,
     ),
 }
 EPHEMERIS_PREFERENCE = ("de441", "de440", "de421")
@@ -316,9 +320,9 @@ def _select_calibration_ephemeris() -> Tuple[EphemerisSpec, Optional[Path]]:
     return EPHEMERIS_SPECS["de421"], _resolve_ephemeris_path("de421.bsp")
 
 def resolve_ephemeris(year: int):
-    if 1950 <= year <= 2050:
+    if 1951 <= year <= 2049:
         return "de421"
-    elif 1550 <= year <= 2650:
+    elif 1551 <= year <= 2649:
         return "de440"
     else:
         return "de441"
@@ -387,6 +391,8 @@ PHASE_NAMES = [
 ]
 
 def _resolve_cal_path(path: str) -> Path:
+    if path == 'AetherField':
+        return path
     p = Path(path)
     if p.is_file():
         return p
@@ -502,9 +508,11 @@ def _as_datetime(dt_or_mt: Any) -> datetime:
         if not isinstance(dt, datetime):
             raise TypeError("to_datetime() did not return a datetime")
         return dt
-    raise TypeError(
-        "Expected datetime, Skyfield Time, or MoonTime-like object with to_datetime()"
-    )
+    # Non datetime, Moontime, or Skyfield object detected, falling back
+    return datetime.now(UTC)
+    #raise TypeError(
+    #    "Expected datetime, Skyfield Time, or MoonTime-like object with to_datetime()"
+    #)
 
 
 def _body_key(eph, name: str):
@@ -962,11 +970,10 @@ class AetherField:
 
     @classmethod
     def load_calibration(cls, path: str) -> 'AetherField':
+        global data
         """Load rates, anchors, and piecewise segments from a JSON file."""     
-        if not os.getenv("AETHER_CAL_FILE", False):
-            CACHE_PATH = os.path.join(os.path.expanduser("~"), ".cache", "aetherfield", "aetherfield_calibration.json")
-            REMOTE_URL = "https://pythoness.duckdns.org/v1/aether/calibration/file"
-            data = None
+        if path == 'AetherField':
+
             if not data:
             # 2. Remote fetch
                 try:
@@ -1042,7 +1049,7 @@ _GLOBAL_AETHER = AetherField()
 _CAL_LOADED = False
 if not _CAL_LOADED:
     # allow override via env var if you want
-    cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+    cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
     _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
     _CAL_LOADED = True
 
@@ -1050,7 +1057,7 @@ def aether_alignments(dt: Optional[Any] = None) -> Dict[str, str]:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv('AETHER_CAL_FILE', 'aetherfield_calibration.json')
+        cal_path = os.getenv('AETHER_CAL_FILE', 'AetherField')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
 
@@ -1103,7 +1110,7 @@ def aether_longitude(dt: Any, body: str) -> float:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
         
@@ -1114,7 +1121,7 @@ def aether_sign(dt: Any, body: str) -> str:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
         
@@ -1140,7 +1147,7 @@ def aetherium_longitude_mt(mt: Any, body: str) -> float:
 
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
 
@@ -1162,7 +1169,7 @@ def moon_phase(dt: Any):
 
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
 
@@ -1302,7 +1309,7 @@ def ae_is_up(dt, body: str, coords: (float, float) = None, method: str = "full",
 
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", "aetherfield_calibration.json")
+        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
     lat_deg, lon_deg = map(float, coords.split(','))
