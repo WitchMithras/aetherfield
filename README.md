@@ -6,7 +6,7 @@ It is designed to sit cleanly on top of my own temporal layer `moontime` while r
 
 At its core, AetherField answers a simple question:
 
-> *Given a moment in time, where are the bodies — and what do they mean?*
+> *Given a moment in time, where are the celestial bodies?*
 
 ---
 
@@ -138,7 +138,7 @@ af = af.load_calibration("AetherField")
 ### Sign Lookup
 
 ```python
-af.sign(dt, "sun")
+af.sign(dt, "neptune")
 ```
 
 Returns the zodiac sign for a given celestial body.
@@ -158,7 +158,7 @@ Returns all tracked bodies in a single call.
 ### Longitude
 
 ```python
-af.longitude(dt, "sun")
+af.longitude(dt, "mars")
 ```
 
 Returns the raw longitude in degrees.
@@ -177,13 +177,13 @@ AetherField accepts multiple time formats seamlessly:
 ### Python `datetime`
 
 ```python
-af.sign(datetime.now(), "sun")
+af.sign(datetime.now(), "saturn")
 ```
 
 ### MoonTime
 
 ```python
-af.sign(MoonTime.now(), "sun")
+af.sign(MoonTime.now(), "venus")
 ```
 
 ### Skyfield
@@ -191,7 +191,7 @@ af.sign(MoonTime.now(), "sun")
 ```python
 ts = load.timescale()
 sf = ts.from_datetime(dt)
-af.sign(sf, "sun")
+af.sign(sf, "jupiter")
 ```
 
 ---
