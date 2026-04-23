@@ -128,11 +128,9 @@ Creates a baseline field with no calibration applied.
 Calibration adjusts how positions are interpreted.
 
 ```python
-b = AetherField.load_calibration("my_calibration.json")   # Local calibration
-c = AetherField.load_calibration("AetherField")   # Hosted calibration
+af = af.load_calibration("AetherField")
 ```
 
-* **Local**: Your own dataset
 * **Hosted**: Pulled from my server
 
 ---
@@ -140,7 +138,7 @@ c = AetherField.load_calibration("AetherField")   # Hosted calibration
 ### Sign Lookup
 
 ```python
-af.sign(dt=dt, body="sun")
+af.sign(dt, "sun")
 ```
 
 Returns the zodiac sign for a given celestial body.
@@ -150,7 +148,7 @@ Returns the zodiac sign for a given celestial body.
 ### Full Alignment
 
 ```python
-af.alignments(dt=dt)
+af.alignments(dt)
 ```
 
 Returns all tracked bodies in a single call.
@@ -160,7 +158,7 @@ Returns all tracked bodies in a single call.
 ### Longitude
 
 ```python
-af.longitude(dt=dt, body="sun")
+af.longitude(dt, "sun")
 ```
 
 Returns the raw longitude in degrees.
@@ -179,13 +177,13 @@ AetherField accepts multiple time formats seamlessly:
 ### Python `datetime`
 
 ```python
-af.sign(dt=datetime.now(), body="sun")
+af.sign(datetime.now(), "sun")
 ```
 
 ### MoonTime
 
 ```python
-af.sign(dt=MoonTime.now(), body="sun")
+af.sign(MoonTime.now(), "sun")
 ```
 
 ### Skyfield
@@ -193,7 +191,7 @@ af.sign(dt=MoonTime.now(), body="sun")
 ```python
 ts = load.timescale()
 sf = ts.from_datetime(dt)
-af.sign(dt=sf, body="sun")
+af.sign(sf, "sun")
 ```
 
 ---
