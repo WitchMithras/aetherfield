@@ -116,7 +116,7 @@ Draconic: 336.2217926416203
 ### AetherField Instance
 
 ```python
-a = AetherField()
+af = AetherField()
 ```
 
 Creates a baseline field with no calibration applied.
@@ -128,19 +128,19 @@ Creates a baseline field with no calibration applied.
 Calibration adjusts how positions are interpreted.
 
 ```python
-b = AetherField.load_calibration("my_calibration.json")           # Local calibration
+b = AetherField.load_calibration("my_calibration.json")   # Local calibration
 c = AetherField.load_calibration("AetherField")   # Hosted calibration
 ```
 
-* **Local**: Your own dataset or tuning
-* **Hosted**: Pulled automatically from a remote source
+* **Local**: Your own dataset
+* **Hosted**: Pulled from my server
 
 ---
 
 ### Sign Lookup
 
 ```python
-c.sign(dt=dt, body="sun")
+af.sign(dt=dt, body="sun")
 ```
 
 Returns the zodiac sign for a given celestial body.
@@ -150,7 +150,7 @@ Returns the zodiac sign for a given celestial body.
 ### Full Alignment
 
 ```python
-c.alignments(dt=dt)
+af.alignments(dt=dt)
 ```
 
 Returns all tracked bodies in a single call.
@@ -160,7 +160,7 @@ Returns all tracked bodies in a single call.
 ### Longitude
 
 ```python
-c.longitude(dt=dt, body="sun")
+af.longitude(dt=dt, body="sun")
 ```
 
 Returns the raw longitude in degrees.
@@ -179,13 +179,13 @@ AetherField accepts multiple time formats seamlessly:
 ### Python `datetime`
 
 ```python
-c.sign(dt=datetime.now(timezone.utc), body="sun")
+af.sign(dt=datetime.now(), body="sun")
 ```
 
 ### MoonTime
 
 ```python
-c.sign(dt=MoonTime.now(), body="sun")
+af.sign(dt=MoonTime.now(), body="sun")
 ```
 
 ### Skyfield
@@ -193,7 +193,7 @@ c.sign(dt=MoonTime.now(), body="sun")
 ```python
 ts = load.timescale()
 sf = ts.from_datetime(dt)
-c.sign(dt=sf, body="sun")
+af.sign(dt=sf, body="sun")
 ```
 
 ---
@@ -206,16 +206,17 @@ AetherField includes a command-line interface.
 aetherfield --body sun
 ```
 
-### Example
+```bash
+aetherfield --body moon
+```
+
+### Example Output
 
 ```
 sun @ 2026-04-23T02:05:39.166446+00:00
   Aether:     30.398 deg  (Aries)
 ```
 
-```bash
-aetherfield --body moon
-```
 
 ```
 moon @ 2026-04-23T02:09:49.959350+00:00
