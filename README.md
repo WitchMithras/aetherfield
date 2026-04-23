@@ -39,30 +39,36 @@ pip install aetherfield
 ## 🚀 Quick Example
 
 ```python
-from aetherfield import AetherField as af
+from aetherfield import AetherField
 
 def example():
     from skyfield.api import load
     from datetime import datetime, timezone
     from moontime import MoonTime
 
-    dt = datetime.now(timezone.utc)
     
-    a = af()  # No calibration
-    b = af.load_calibration(caled)  # Local calibration
-    c = af.load_calibration('AetherField')  # Hosted calibration
+    # Three different instances with different calibrations:
 
-    print("No calibration:", a.sign(dt=dt, body="sun"))
-    print("Local calibration:", b.sign(dt=dt, body="sun"))
-    print("Hosted calibration:", c.sign(dt=dt, body="sun"))
+    a = AetherField()  # No calibration
+    b = AetherField.load_calibration("my_calibration.json")  # Local calibration
+    c = AetherField.load_calibration('AetherField')  # Hosted calibration
+
+    # Works with dt
+    dt = datetime.now(timezone.utc)
+
+    print("No calibration:", a.sign(dt=dt, body="sun"))  # No calibration
+    print("Local calibration:", b.sign(dt=dt, body="sun")) # Local calibration
+    print("Hosted calibration:", c.sign(dt=dt, body="sun")) # Hosted calibration
 
     print("Full suite:", c.alignments(dt=dt))
     
+    # Works with skyfield time
     ts = load.timescale()
     sf = ts.from_datetime(dt)
 
     print("From skyfield time:", c.sign(dt=sf, body="sun"))
 
+    # Works with moontime
     mt = MoonTime.from_datetime(dt)
 
     print("From moontime:", c.sign(dt=mt, body="sun"))
@@ -110,7 +116,7 @@ Draconic: 336.2217926416203
 ### AetherField Instance
 
 ```python
-a = af()
+a = AetherField()
 ```
 
 Creates a baseline field with no calibration applied.
@@ -122,8 +128,8 @@ Creates a baseline field with no calibration applied.
 Calibration adjusts how positions are interpreted.
 
 ```python
-b = af.load_calibration("my_calibration.json")           # Local calibration
-c = af.load_calibration("AetherField")   # Hosted calibration
+b = AetherField.load_calibration("my_calibration.json")           # Local calibration
+c = AetherField.load_calibration("AetherField")   # Hosted calibration
 ```
 
 * **Local**: Your own dataset or tuning
@@ -179,8 +185,7 @@ c.sign(dt=datetime.now(timezone.utc), body="sun")
 ### MoonTime
 
 ```python
-mt = MoonTime.from_datetime(dt)
-c.sign(dt=mt, body="sun")
+c.sign(dt=MoonTime.now(), body="sun")
 ```
 
 ### Skyfield
