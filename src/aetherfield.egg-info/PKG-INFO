@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: aetherfield
-Version: 0.4.7
+Version: 0.4.8
 Summary: AetherField runtime ephemeris
 Author: WitchMithras
 License: Other/Proprietary License
@@ -24,7 +24,7 @@ It is designed to sit cleanly on top of my own temporal layer `moontime` while r
 
 At its core, AetherField answers a simple question:
 
-> *Given a moment in time, where are the bodies — and what do they mean?*
+> *Given a moment in time, where are the celestial bodies?*
 
 ---
 
@@ -156,7 +156,7 @@ af = af.load_calibration("AetherField")
 ### Sign Lookup
 
 ```python
-af.sign(dt, "sun")
+af.sign(dt, "neptune")
 ```
 
 Returns the zodiac sign for a given celestial body.
@@ -176,7 +176,7 @@ Returns all tracked bodies in a single call.
 ### Longitude
 
 ```python
-af.longitude(dt, "sun")
+af.longitude(dt, "mars")
 ```
 
 Returns the raw longitude in degrees.
@@ -195,13 +195,13 @@ AetherField accepts multiple time formats seamlessly:
 ### Python `datetime`
 
 ```python
-af.sign(datetime.now(), "sun")
+af.sign(datetime.now(), "saturn")
 ```
 
 ### MoonTime
 
 ```python
-af.sign(MoonTime.now(), "sun")
+af.sign(MoonTime.now(), "venus")
 ```
 
 ### Skyfield
@@ -209,7 +209,7 @@ af.sign(MoonTime.now(), "sun")
 ```python
 ts = load.timescale()
 sf = ts.from_datetime(dt)
-af.sign(sf, "sun")
+af.sign(sf, "jupiter")
 ```
 
 ---
@@ -223,7 +223,11 @@ aetherfield --body sun
 ```
 
 ```bash
-aetherfield --body moon
+aetherfield --body moon --dt 2026-04-23T04:21:12
+```
+
+```bash
+aetherfield --body uranus --mt mt:6739,01,12 --json
 ```
 
 ### Example Output
@@ -233,10 +237,18 @@ sun @ 2026-04-23T02:05:39.166446+00:00
   Aether:     30.398 deg  (Aries)
 ```
 
+```
+moon @ 2026-04-23T04:21:12+00:00
+  Aether:    112.204 deg  (Gemini)
+```
 
 ```
-moon @ 2026-04-23T02:09:49.959350+00:00
-  Aether:    110.767 deg  (Gemini)
+{
+  "body": "uranus",
+  "dt": "2026-04-23T11:19:24.019270+00:00",
+  "lon": 86.42849018346915,
+  "sign": "Taurus"
+}
 ```
 
 The CLI automatically pulls hosted calibration when available.

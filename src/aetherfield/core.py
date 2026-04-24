@@ -226,7 +226,7 @@ DE440_START = datetime(1551, 1, 2, tzinfo=UTC)
 DE440_END = datetime(2649, 12, 30, 23, 59, 58, tzinfo=UTC)
 # DE441 spans beyond Python's datetime range; clamp to supported bounds.
 DE441_START = datetime(1, 1, 2, tzinfo=UTC)
-DE441_END = datetime(9999, 12, 30, 23, 59, 58, tzinfo=UTC)
+DE441_END = datetime(1550, 12, 30, 23, 59, 58, tzinfo=UTC)
 
 
 @dataclass(frozen=True)
@@ -261,7 +261,8 @@ EPHEMERIS_SPECS: Dict[str, EphemerisSpec] = {
         start=DE441_START,
         end=DE441_END,
         true_start_year=-13201,
-        true_end_year=17189,
+        #true_end_year=17189,
+        true_end_year=1550,
     ),
 }
 EPHEMERIS_PREFERENCE = ("de441", "de440", "de421")
@@ -1351,6 +1352,22 @@ def ae_is_up(dt, body: str, coords: (float, float) = None, method: str = "full",
         "dec_deg": dec_body,
         "min_alt_deg": min_alt_deg,
     }
+
+def obliquity_deg(dt):
+    """
+    Approximate mean obliquity of the ecliptic (arcseconds → degrees)
+    Good to ~0.01° over a few centuries.
+    """
+    T = (dt.year - 2000) / 100.0  # centuries since J2000
+
+    eps_arcsec = (
+        84381.406
+        - 46.836769 * T
+        - 0.0001831 * T**2
+        + 0.00200340 * T**3
+    )
+
+    return eps_arcsec / 3600.0
 
 def summarize_is_up(dt, bodies=bodies):
     out = {}
