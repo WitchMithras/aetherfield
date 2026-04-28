@@ -32,6 +32,22 @@ SIGNS = [
     "Virgo", "Libra", "Scorpio", "Sagittarius",
     "Capricorn", "Aquarius", "Pisces"
 ]
+
+ZODIAC_BOUNDARIES = {
+    'Aries': 0,
+    'Taurus': 25,
+    'Gemini': 63,
+    'Cancer': 92,
+    'Leo': 112,
+    'Virgo': 149,
+    'Libra': 193,
+    'Scorpio': 216,
+    'Sagittarius': 240,
+    'Capricorn': 272,
+    'Aquarius': 299,
+    'Pisces': 314
+}
+
 data = None
 
 AGE_LENGTH = 2147.67
@@ -181,6 +197,16 @@ except Exception:
     SKYFIELD_OK = False
 
 
+def build_zodiac_wheel(boundaries: dict[str, float]) -> list[tuple[str, float]]:
+    """Returns sorted list of (sign, start_degree)"""
+    return sorted(boundaries.items(), key=lambda x: x[1])
+
+
+def rotate_wheel(wheel: list[tuple[str, float]], start_sign: str):
+    """Rotate wheel so it starts at start_sign"""
+    i = next(idx for idx, (sign, _) in enumerate(wheel) if sign == start_sign)
+    return wheel[i:] + wheel[:i]
+
 
 def get_age_sign(year: int) -> str:
 
@@ -197,7 +223,7 @@ def rotated_zodiac(start_sign: str) -> list[str]:
     i = SIGNS.index(start_sign)
     return SIGNS[i:] + SIGNS[:i]
 
-def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
+def get_zodiac_by_longitude_even(longitude: float, dt: datetime) -> str:
     dt = _as_datetime(dt)
     year = dt.year
     age_sign = get_age_sign(year)
@@ -205,6 +231,31 @@ def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
 
     i = int(longitude // 30) % 12
     return signs[i]
+
+def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
+    dt = _as_datetime(dt)
+    year = dt.year
+
+    age_sign = get_age_sign(year)
+
+    # Normalize longitude
+    longitude = longitude % 360
+
+    wheel = build_zodiac_wheel(ZODIAC_BOUNDARIES)
+    wheel = rotate_wheel(wheel, age_sign)
+
+    for i, (sign, start) in enumerate(wheel):
+        next_start = wheel[(i + 1) % 12][1]
+
+        if start <= next_start:
+            if start <= longitude < next_start:
+                return sign
+        else:
+            # Wrap-around case (e.g., 314 → 0)
+            if longitude >= start or longitude < next_start:
+                return sign
+
+    return get_zodiac_by_longitude_even(longitude, dt)
 
 try:
     # Reuse existing helper for sign segmentation if present
