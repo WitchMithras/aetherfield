@@ -74,13 +74,17 @@ def parse_sf_time(sf_str: Optional[str]):
         return None
 
     if "," not in s:
-        iso_candidate = s
-        if iso_candidate.endswith(("Z", "z")):
-            iso_candidate = iso_candidate[:-1] + "+00:00"
-        try:
-            dt = datetime.fromisoformat(iso_candidate)
-        except Exception:
-            dt = None
+        # detect negative or year 0
+        if s.strip().startswith("-") or s.strip().startswith("0000"):
+            dt = None  # force fallback to regex
+        else:
+            iso_candidate = s
+            if iso_candidate.endswith(("Z", "z")):
+                iso_candidate = iso_candidate[:-1] + "+00:00"
+            try:
+                dt = datetime.fromisoformat(iso_candidate)
+            except Exception:
+                dt = None
         if dt is not None:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=UTC)
@@ -253,8 +257,14 @@ def compare_once(a: af.AetherField, body: str, dt: Any, force_aether: bool = Fal
             pass
     sky_lon: Optional[float] = None
     sky_sign: Optional[str] = None
-    aether_lon = a.longitude(dt, body)
-    aether_sign = a.sign(dt, body)
+
+    if af.is_skyfield_time(dt):
+        t = dt
+        aether_lon = sf_ecliptic_longitude(t, body)
+        aether_sign = af.get_zodiac_by_longitude(aether_lon)
+    else:
+        aether_lon = a.longitude(dt, body)
+        aether_sign = a.sign(dt, body)
 
     delta = wrap_delta_deg(aether_lon, sky_lon) if sky_lon is not None else None
     return CompareResult(body, dt, aether_lon, aether_sign)
