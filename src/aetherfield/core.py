@@ -1034,7 +1034,7 @@ class AetherField:
 
                     #return data
                 except Exception:
-                    return fallback
+                    return None
 
         else:
             
@@ -1046,14 +1046,14 @@ class AetherField:
         anchors_max = data.get('anchors_max') or {}
         def _parse_window_dt(value: Optional[str], fallback: datetime) -> datetime:
             if not value:
-                return fallback
+                return None
             try:
                 parsed = datetime.fromisoformat(value)
                 if parsed.tzinfo is None:
                     parsed = parsed.replace(tzinfo=UTC)
                 return parsed.astimezone(UTC)
             except Exception:
-                return fallback
+                return None
 
         window_start = _parse_window_dt(
             data.get('ephemeris_start') or data.get('calibration_start') or data.get('de421_start'),
