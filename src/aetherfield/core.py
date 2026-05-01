@@ -1040,6 +1040,7 @@ class AetherField:
             
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+
         rates = data.get('rates_deg_per_day') or data.get('rates') or {}        
         anchors_min = data.get('anchors_min') or {}
         anchors_max = data.get('anchors_max') or {}
