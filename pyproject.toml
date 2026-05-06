@@ -34,5 +34,8 @@ where = ["src"]
 include = ["aetherfield*"]
 exclude = ["tests*"]
 
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
 [project.scripts]
 aetherfield = "aetherfield.cli:main"

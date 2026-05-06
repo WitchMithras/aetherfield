@@ -1021,25 +1021,32 @@ class AetherField:
     @classmethod
     def load_calibration(cls, path: str) -> 'AetherField':
         global data
-        """Load rates, anchors, and piecewise segments from a JSON file."""     
-        if path == 'AetherField':
+        """Load rates, anchors, and piecewise segments from JSON.
 
-            if not data:
-            # 2. Remote fetch
-                try:
+        Falls back to an uncalibrated field if hosted or local calibration cannot
+        be loaded.
+        """
+        try:
+            if path == 'AetherField':
+
+                if not data:
+                    # 2. Remote fetch
                     import urllib.request
 
                     with urllib.request.urlopen(REMOTE_URL, timeout=10) as response:
                         data = json.load(response)
 
                     #return data
-                except Exception:
-                    return None
 
-        else:
-            
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            else:
+
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+        except Exception:
+            return cls()
+
+        if not isinstance(data, dict):
+            return cls()
 
         rates = data.get('rates_deg_per_day') or data.get('rates') or {}        
         anchors_min = data.get('anchors_min') or {}
