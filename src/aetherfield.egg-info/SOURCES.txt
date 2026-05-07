@@ -11,3 +11,4 @@ src/aetherfield.egg-info/dependency_links.txt
 src/aetherfield.egg-info/entry_points.txt
 src/aetherfield.egg-info/requires.txt
 src/aetherfield.egg-info/top_level.txt
+tests/test_stress_runtime.py
