@@ -34,8 +34,12 @@ where = ["src"]
 include = ["aetherfield*"]
 exclude = ["tests*"]
 
+[tool.setuptools.package-data]
+aetherfield = ["aetherfield_calibration.json"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 
 [project.scripts]
 aetherfield = "aetherfield.cli:main"
+aetherfield-build-calibration = "aetherfield.deploy_calibration:main"
