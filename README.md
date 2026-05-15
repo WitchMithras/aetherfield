@@ -194,49 +194,6 @@ sf = ts.from_datetime(dt)
 af.sign(sf, "jupiter")
 ```
 
----
-
-## 🖥️ CLI Usage
-
-AetherField includes a command-line interface.
-
-```bash
-aetherfield --body sun
-```
-
-```bash
-aetherfield --body moon --dt 2026-04-23T04:21:12
-```
-
-```bash
-aetherfield --body uranus --mt mt:6739,01,12 --json
-```
-
-### Example Output
-
-```
-sun @ 2026-04-23T02:05:39.166446+00:00
-  Aether:     30.398 deg  (Aries)
-```
-
-```
-moon @ 2026-04-23T04:21:12+00:00
-  Aether:    112.204 deg  (Gemini)
-```
-
-```
-{
-  "body": "uranus",
-  "dt": "2026-04-23T11:19:24.019270+00:00",
-  "lon": 86.42849018346915,
-  "sign": "Taurus"
-}
-```
-
-The CLI automatically pulls hosted calibration when available.
-
----
-
 ## 🧬 Design Philosophy
 
 AetherField is built to be:
