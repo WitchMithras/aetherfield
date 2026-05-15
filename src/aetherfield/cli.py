@@ -261,7 +261,7 @@ def compare_once(a: af.AetherField, body: str, dt: Any, force_aether: bool = Fal
     if af.is_skyfield_time(dt):
         t = dt
         aether_lon = sf_ecliptic_longitude(t, body)
-        aether_sign = af.get_zodiac_by_longitude(aether_lon)
+        aether_sign = af.get_zodiac_by_longitude_dt(aether_lon, dt)
     else:
         aether_lon = a.longitude(dt, body)
         aether_sign = a.sign(dt, body)
