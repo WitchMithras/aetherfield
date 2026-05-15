@@ -214,6 +214,47 @@ def rotated_zodiac(start_sign: str) -> list[str]:
     i = SIGNS.index(start_sign)
     return SIGNS[i:] + SIGNS[:i]
 
+def build_age_transition_wheel(boundaries, age_sign, year):
+    """
+    Builds a transitional wheel where the age_sign begins at 0,
+    but the carried-over seam gradually closes through the age.
+
+    In Pisces age:
+        Pisces = 0
+        Aries = 46 * age_progress
+        Taurus = 71 * age_progress
+        ...
+        Pisces = 360 - (46 * (1 - age_progress))
+    """
+
+    age_progress = (year - ANCHOR_YEAR) / AGE_LENGTH
+    age_progress = max(0.0, min(1.0, age_progress))
+
+    age_start = boundaries[age_sign]
+
+    wheel = []
+
+    # Rotate signs so Pisces comes first
+    signs = rotated_zodiac(age_sign)
+
+    for sign in signs:
+        raw = boundaries[sign]
+
+        # shift so age_sign becomes 0
+        shifted = (raw - age_start) % 360
+
+        # scale into current age progress
+        transitioned = shifted * age_progress
+
+        wheel.append((sign, transitioned))
+
+    # Add the closing duplicate of the age sign near 360
+    carry = 360 - age_start
+    closing_pisces = 360 - (carry * (1 - age_progress))
+
+    wheel.append((age_sign, closing_pisces))
+
+    return sorted(wheel, key=lambda x: x[1])
 
 def build_age_shifted_wheel(boundaries: dict[str, float], age_sign: str):
     """
@@ -244,13 +285,19 @@ def get_age_sign(year: int) -> str:
 
 def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
     dt = _as_datetime(dt)
+    year = dt.year
     longitude = longitude % 360
 
-    age_sign = get_age_sign(dt.year)
-    wheel = build_age_shifted_wheel(ZODIAC_BOUNDARIES, age_sign)
+    age_sign = get_age_sign(year)
+
+    wheel = build_age_transition_wheel(
+        ZODIAC_BOUNDARIES,
+        age_sign,
+        year
+    )
 
     for i, (sign, start) in enumerate(wheel):
-        next_start = wheel[(i + 1) % 12][1]
+        next_start = wheel[(i + 1) % len(wheel)][1]
 
         if start <= next_start:
             if start <= longitude < next_start:
@@ -259,7 +306,7 @@ def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
             if longitude >= start or longitude < next_start:
                 return sign
 
-    return get_zodiac_by_longitude_even(longitude, dt)
+    return wheel[-1][0]
 
 def get_zodiac_by_longitude_even(longitude: float, dt: datetime) -> str:
     dt = _as_datetime(dt)
