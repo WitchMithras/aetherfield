@@ -45,7 +45,7 @@ ZODIAC_BOUNDARIES = {
     'Sagittarius': 240,
     'Capricorn': 272,
     'Aquarius': 299,
-    'Pisces': 314
+    'Pisces': 318
 }
 
 data = None
@@ -255,21 +255,6 @@ def build_age_transition_wheel(boundaries, age_sign, year):
     wheel.append((age_sign, closing_pisces))
 
     return sorted(wheel, key=lambda x: x[1])
-
-def build_age_shifted_wheel(boundaries: dict[str, float], age_sign: str):
-    """
-    Keep the boundary degrees fixed, but rotate which signs occupy them.
-    So if age_sign='Pisces', then:
-        0° → Pisces
-        25° → Aries
-        63° → Taurus
-        etc.
-    """
-    starts = sorted(boundaries.values())
-    signs = rotated_zodiac(age_sign)
-
-    return list(zip(signs, starts))
-
 
 def get_age_sign(year: int) -> str:
     offset_years = year - ANCHOR_YEAR
