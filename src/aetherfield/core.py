@@ -315,6 +315,14 @@ except Exception:
         i = int(longitude // 30) % 12
         return signs[i]
 
+def get_tropical_zodiac_by_longitude(longitude: float) -> str:
+    signs = [
+        "Aries", "Taurus", "Gemini", "Cancer", "Leo",
+        "Virgo", "Libra", "Scorpio", "Sagittarius",
+        "Capricorn", "Aquarius", "Pisces"
+    ]
+    i = int(longitude // 30) % 12
+    return signs[i]
 
 DE421_START = datetime(1951, 1, 2, tzinfo=UTC)
 DE421_END = datetime(2049, 12, 30, 23, 59, 58, tzinfo=UTC)
@@ -978,6 +986,14 @@ class AetherField:
     def sign(self, dt: Any, body: str) -> str:
         lon = self.longitude(dt, body)
         return get_zodiac_by_longitude_dt(lon, dt)
+
+    def tropical_sign(self, dt: Any, body: str) -> str:
+        lon = self.longitude(dt, body)
+        return get_tropical_zodiac_by_longitude(lon)
+
+    def even_sign(self, dt: Any, body: str) -> str:
+        lon = self.longitude(dt, body)
+        return get_zodiac_by_longitude_even(lon, dt)
 
     def alignments(self, dt: Any, include_nodes: bool = True) -> Dict[str, str]:
         targets = ALIGNMENT_BODIES if include_nodes else PLANET_ALIGNMENT_BODIES
