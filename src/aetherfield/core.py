@@ -324,6 +324,126 @@ def get_tropical_zodiac_by_longitude(longitude: float) -> str:
     i = int(longitude // 30) % 12
     return signs[i]
 
+def refine_border(af, left, right, body="sun", steps=24):
+    """
+    Refine the moment where the sign changes between left and right.
+    Assumes left and right are on different signs.
+    """
+    left_sign = af.sign(left, body)
+
+    for _ in range(steps):
+        mid = left + (right - left) / 2
+        mid_sign = af.sign(mid, body)
+
+        if mid_sign == left_sign:
+            left = mid
+        else:
+            right = mid
+
+    return right
+
+
+def find_previous_border(af, start, body="sun"):
+    """
+    Walk backward from start until the sign changes.
+    Returns:
+        border_dt, previous_sign, start_sign
+    """
+    start_sign = af.sign(start, body)
+
+    current = start
+
+    while True:
+        prev = current - timedelta(days=1)
+        prev_sign = af.sign(prev, body)
+
+        if prev_sign != start_sign:
+            border = refine_border(af, prev, current, body)
+            return border, prev_sign, start_sign
+
+        current = prev
+
+
+def build_zodiac_year(af, start=None, body="sun"):
+    """
+    Build one zodiac year.
+
+    Starts near the spring equinox, walks backward to find the first border,
+    then walks forward until the previous sign returns as the closing border.
+    """
+
+    if start is None:
+        start = datetime(2026, 3, 21, tzinfo=timezone.utc)
+
+    first_border, previous_sign, start_sign = find_previous_border(
+        af,
+        start,
+        body
+    )
+
+    borders = []
+
+    current = first_border
+    current_sign = af.sign(current + timedelta(minutes=1), body)
+
+    borders.append({
+        "sign": current_sign,
+        "start": first_border,
+    })
+
+    while True:
+        next_day = current + timedelta(days=1)
+        sign_now = af.sign(current + timedelta(minutes=1), body)
+        sign_next = af.sign(next_day, body)
+
+        if sign_next != sign_now:
+            border = refine_border(af, current, next_day, body)
+
+            new_sign = af.sign(border + timedelta(minutes=1), body)
+
+            # Closing condition:
+            # we have looped back to the sign before the equinox-start sign
+            if new_sign == previous_sign:
+                borders.append({
+                    "sign": new_sign,
+                    "start": border,
+                })
+                break
+
+            borders.append({
+                "sign": new_sign,
+                "start": border,
+            })
+
+            current = border
+        else:
+            current = next_day
+
+    return borders
+
+
+def pretty_print_zodiac_year(borders):
+    """
+    Pretty print the zodiac year with start/end spans.
+    """
+
+    print("Zodiac Year")
+    print("=" * 48)
+
+    for i in range(len(borders) - 1):
+        sign = borders[i]["sign"]
+        start = borders[i]["start"]
+        end = borders[i + 1]["start"]
+
+        duration = end - start
+
+        print(
+            f"{sign:<12} "
+            f"{start.strftime('%Y-%m-%d %H:%M UTC')}  →  "
+            f"{end.strftime('%Y-%m-%d %H:%M UTC')}  "
+            f"({duration.days}d {duration.seconds // 3600}h)"
+        )
+
 DE421_START = datetime(1951, 1, 2, tzinfo=UTC)
 DE421_END = datetime(2049, 12, 30, 23, 59, 58, tzinfo=UTC)
 DE440_START = datetime(1551, 1, 2, tzinfo=UTC)
