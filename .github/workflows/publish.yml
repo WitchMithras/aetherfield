@@ -27,11 +27,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build twine
-          pip install -e .
-
-      - name: Build minimal calibration
-        run: |
-          python -m aetherfield.deploy_calibration --output src/aetherfield/aetherfield_calibration.json
 
       - name: Build package
         run: |

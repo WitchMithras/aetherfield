@@ -57,8 +57,6 @@ ANCHOR_SIGN = "Pisces"
 
 CACHE_PATH = os.path.join(os.path.expanduser("~"), ".cache", "aetherfield", "aetherfield_calibration.json")
 REMOTE_URL = "https://pythoness.duckdns.org/v1/aether/calibration/file"
-BUNDLED_CALIBRATION_FILE = "aetherfield_calibration.json"
-MINIMAL_CALIBRATION_VERSION = 1
 
 load_dotenv()
 
@@ -623,18 +621,6 @@ def _resolve_cal_path(path: str) -> Path:
     here = Path(__file__).resolve().parent
     p2 = here.parent.parent.parent / path  # repo root relative
     return p2 if p2.is_file() else Path(path)
-
-
-def _load_bundled_calibration_data() -> Optional[Dict[str, Any]]:
-    try:
-        from importlib.resources import files
-
-        resource = files(__package__).joinpath(BUNDLED_CALIBRATION_FILE)
-        with resource.open("r", encoding="utf-8") as f:
-            payload = json.load(f)
-        return payload if isinstance(payload, dict) else None
-    except Exception:
-        return None
 
 
 def _ensure_utc_datetime(dt: datetime) -> datetime:
@@ -1219,7 +1205,6 @@ class AetherField:
         Falls back to an uncalibrated field if hosted or local calibration cannot
         be loaded.
         """
-        payload = None
         try:
             if path == 'AetherField':
 
@@ -1231,26 +1216,20 @@ class AetherField:
                         data = json.load(response)
 
                     #return data
-                payload = data
 
             else:
 
                 with open(path, 'r', encoding='utf-8') as f:
-                    payload = json.load(f)
+                    data = json.load(f)
         except Exception:
-            if path == 'AetherField':
-                payload = _load_bundled_calibration_data()
-                if payload:
-                    data = payload
-            if not payload:
-                return cls()
-
-        if not isinstance(payload, dict):
             return cls()
 
-        rates = payload.get('rates_deg_per_day') or payload.get('rates') or {}
-        anchors_min = payload.get('anchors_min') or {}
-        anchors_max = payload.get('anchors_max') or {}
+        if not isinstance(data, dict):
+            return cls()
+
+        rates = data.get('rates_deg_per_day') or data.get('rates') or {}        
+        anchors_min = data.get('anchors_min') or {}
+        anchors_max = data.get('anchors_max') or {}
         def _parse_window_dt(value: Optional[str], fallback: datetime) -> datetime:
             if not value:
                 return None
@@ -1263,15 +1242,15 @@ class AetherField:
                 return None
 
         window_start = _parse_window_dt(
-            payload.get('ephemeris_start') or payload.get('calibration_start') or payload.get('de421_start'),
+            data.get('ephemeris_start') or data.get('calibration_start') or data.get('de421_start'),
             EPHEMERIS_START,
         )
         window_end = _parse_window_dt(
-            payload.get('ephemeris_end') or payload.get('calibration_end') or payload.get('de421_end'),
+            data.get('ephemeris_end') or data.get('calibration_end') or data.get('de421_end'),
             EPHEMERIS_END,
         )
-        ephemeris_name = payload.get('ephemeris_name')
-        ephemeris_path = payload.get('ephemeris_path')
+        ephemeris_name = data.get('ephemeris_name')
+        ephemeris_path = data.get('ephemeris_path')
         inst = cls(
             rates_deg_per_day=rates,
             anchors_min=anchors_min,
@@ -1281,7 +1260,7 @@ class AetherField:
             ephemeris_name=ephemeris_name,
             ephemeris_path=ephemeris_path,
         )
-        piecewise_data = payload.get('piecewise') or {}
+        piecewise_data = data.get('piecewise') or {}
         pw: Dict[str, List[DriftSegment]] = {}
         for b, segs in piecewise_data.items():
             parsed: List[DriftSegment] = []
@@ -1302,92 +1281,14 @@ class AetherField:
         return inst
 
 
-def _zodiac_midpoints_for_dt(dt: Any) -> Dict[str, float]:
-    dt_value = _as_datetime(dt)
-    wheel = rotate_wheel(build_zodiac_wheel(ZODIAC_BOUNDARIES), get_age_sign(dt_value.year))
-    midpoints: Dict[str, float] = {}
-    for i, (sign, start) in enumerate(wheel):
-        next_start = wheel[(i + 1) % len(wheel)][1]
-        width = (next_start - start) % 360.0
-        if width == 0.0:
-            width = 360.0
-        midpoints[sign] = (start + (width / 2.0)) % 360.0
-    return midpoints
-
-
-def build_minimal_calibration(
-    dt: Optional[Any] = None,
-    source: Optional[AetherField] = None,
-    include_nodes: bool = True,
-) -> Dict[str, Any]:
-    """
-    Build a compact calibration snapshot for deployment.
-
-    The snapshot anchors every tracked body at a single timestamp, preserving
-    the current alignments while keeping only mean drift rates and no piecewise
-    ephemeris samples.
-    """
-    if dt is None:
-        dt_value = datetime.now(UTC)
-    else:
-        dt_value = _as_datetime(dt)
-        dt_value = dt_value if dt_value.tzinfo else dt_value.replace(tzinfo=UTC)
-    dt_value = _ensure_utc_datetime(dt_value)
-
-    field = source or AetherField()
-    alignments = field.alignments(dt_value, include_nodes=include_nodes)
-    sign_midpoints = _zodiac_midpoints_for_dt(dt_value)
-
-    anchors: Dict[str, float] = {}
-    for body, sign in alignments.items():
-        lon = None
-        try:
-            candidate = float(field.longitude(dt_value, body)) % 360.0
-            if get_zodiac_by_longitude_dt(candidate, dt_value) == sign:
-                lon = candidate
-        except Exception:
-            lon = None
-        if lon is None:
-            lon = sign_midpoints[sign]
-        anchors[body] = lon
-
-    rates = {
-        body: float(MEAN_DEG_PER_DAY[body])
-        for body in anchors
-        if body in MEAN_DEG_PER_DAY
-    }
-    generated_at = datetime.now(UTC).isoformat()
-    calibration_time = dt_value.isoformat()
-
-    return {
-        "schema_version": MINIMAL_CALIBRATION_VERSION,
-        "generated_at": generated_at,
-        "calibration_time": calibration_time,
-        "alignments": alignments,
-        "rates_deg_per_day": rates,
-        "anchors_min": anchors,
-        "anchors_max": dict(anchors),
-        "ephemeris_start": calibration_time,
-        "ephemeris_end": calibration_time,
-        "ephemeris_true_start_year": dt_value.year,
-        "ephemeris_true_end_year": dt_value.year,
-        "piecewise": {},
-    }
-
-
-def save_minimal_calibration(path: str, dt: Optional[Any] = None, source: Optional[AetherField] = None) -> Dict[str, Any]:
-    payload = build_minimal_calibration(dt=dt, source=source)
-    out_path = Path(path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, sort_keys=True)
-        f.write("\n")
-    return payload
-
-
 # Convenience singleton
 _GLOBAL_AETHER = AetherField()
 _CAL_LOADED = False
+if not _CAL_LOADED:
+    # allow override via env var if you want
+    cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
+    _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
+    _CAL_LOADED = True
 
 def aether_alignments(dt: Optional[Any] = None) -> Dict[str, str]:
     global _GLOBAL_AETHER, _CAL_LOADED
