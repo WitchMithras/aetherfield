@@ -1198,7 +1198,7 @@ class AetherField:
             json.dump(payload, f, indent=2, sort_keys=True)
 
     @classmethod
-    def load_calibration(cls, path: str = 'AetherField') -> 'AetherField':
+    def load_calibration(cls, path: str = 'rawr.json') -> 'AetherField':
         global data
         """Load rates, anchors, and piecewise segments from JSON.
 
@@ -1286,7 +1286,7 @@ _GLOBAL_AETHER = AetherField()
 _CAL_LOADED = False
 if not _CAL_LOADED:
     # allow override via env var if you want
-    cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
+    cal_path = os.getenv("AETHER_CAL_FILE", 'rawr.json')
     _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
     _CAL_LOADED = True
 
@@ -1294,7 +1294,7 @@ def aether_alignments(dt: Optional[Any] = None) -> Dict[str, str]:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv('AETHER_CAL_FILE', 'AetherField')
+        cal_path = os.getenv('AETHER_CAL_FILE', 'rawr.json')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
 
@@ -1347,7 +1347,7 @@ def aether_longitude(dt: Any, body: str) -> float:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
+        cal_path = os.getenv("AETHER_CAL_FILE", 'rawr.json')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
         
@@ -1358,7 +1358,7 @@ def aether_sign(dt: Any, body: str) -> str:
     global _GLOBAL_AETHER, _CAL_LOADED
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
+        cal_path = os.getenv("AETHER_CAL_FILE", 'rawr.json')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
         
@@ -1384,7 +1384,7 @@ def aetherium_longitude_mt(mt: Any, body: str) -> float:
 
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
+        cal_path = os.getenv("AETHER_CAL_FILE", 'rawr.json')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
 
@@ -1406,7 +1406,7 @@ def moon_phase(dt: Any):
 
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
+        cal_path = os.getenv("AETHER_CAL_FILE", 'rawr.json')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
 
@@ -1546,7 +1546,7 @@ def ae_is_up(dt, body: str, coords: (float, float) = None, method: str = "full",
 
     if not _CAL_LOADED:
         # allow override via env var if you want
-        cal_path = os.getenv("AETHER_CAL_FILE", 'AetherField')
+        cal_path = os.getenv("AETHER_CAL_FILE", 'rawr.json')
         _GLOBAL_AETHER = AetherField.load_calibration(str(_resolve_cal_path(cal_path)))
         _CAL_LOADED = True
     lat_deg, lon_deg = map(float, coords.split(','))
@@ -1620,3 +1620,6 @@ def summarize_is_up(dt, bodies=bodies):
 def aetherfield():
     """Convenience function returning a AetherField for the given request."""
     return AetherField()
+
+
+af = AetherField().load_calibration()
