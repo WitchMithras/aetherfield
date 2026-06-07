@@ -1621,5 +1621,3 @@ def aetherfield():
     """Convenience function returning a AetherField for the given request."""
     return AetherField()
 
-
-af = AetherField().load_calibration()
