@@ -261,7 +261,7 @@ def get_age_sign(year: int) -> str:
     anchor_index = SIGNS.index(ANCHOR_SIGN)
 
     # Ages usually move backward through zodiac:
-    sign_index = (anchor_index - age_index_offset) % 12
+    sign_index = (anchor_index + age_index_offset) % 12
 
     return SIGNS[sign_index]
 
