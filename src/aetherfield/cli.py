@@ -276,7 +276,7 @@ def main(argv=None) -> int:
     p.add_argument('--dt', default=None, help='ISO8601 datetime (UTC).')
     p.add_argument('--mt', default=None, help='MoonTime string (mt:...)')
     p.add_argument('--sf', default=None, help='Skyfield time with astronomical year numbering (ISO 8601 YYYY-MM-DD[THH[:MM[:SS]][Z|+HH:MM]] or YEAR,MONTH,DAY). Overrides --dt/--moontime.')
-    p.add_argument('--load-calibration', default=None, help='Load calibration JSON path.')
+    p.add_argument('--load-calibration', default=None, help='Load calibration JSON path or hosted scope: small, medium, large.')
     p.add_argument('--drift-anchor', choices=['start','end','nearest'], default='end', help='Anchor for drift only mode.')
     p.add_argument('--json', action='store_true', help='Emit JSON instead of text.')
     args = p.parse_args(argv)

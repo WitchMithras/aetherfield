@@ -51,7 +51,7 @@ def example():
 
     a = AetherField()  # No calibration
     b = AetherField.load_calibration("my_calibration.json")  # Local calibration
-    c = AetherField.load_calibration('AetherField')  # Hosted calibration
+    c = AetherField.load_calibration("small")  # Hosted calibration scope
 
     # Works with dt
     dt = datetime.now(timezone.utc)
@@ -128,10 +128,11 @@ Creates a baseline field with no calibration applied.
 Calibration adjusts how positions are interpreted.
 
 ```python
-af = af.load_calibration("AetherField")
+af = af.load_calibration("small")
 ```
 
-* **Hosted**: Pulled from my server
+* **Local**: Pass a JSON path.
+* **Hosted**: Pass `"small"`, `"medium"`, or `"large"` depending on scope. `"AetherField"` remains an alias for `"small"`.
 
 ---
 

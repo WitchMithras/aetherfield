@@ -57,6 +57,9 @@ ANCHOR_SIGN = "Pisces"
 
 CACHE_PATH = os.path.join(os.path.expanduser("~"), ".cache", "aetherfield", "aetherfield_calibration.json")
 REMOTE_URL = "https://pythoness.duckdns.org/v1/aether/calibration/file"
+HOSTED_CALIBRATION_DEFAULT_SCOPE = "small"
+HOSTED_CALIBRATION_SCOPES = {"small", "medium", "large"}
+_HOSTED_CALIBRATION_CACHE: Dict[str, Dict[str, Any]] = {}
 
 load_dotenv()
 
@@ -440,8 +443,39 @@ PHASE_NAMES = [
     "Full", "Waning Gibbous", "Last Quarter", "Waning Crescent"
 ]
 
-def _resolve_cal_path(path: str) -> Path:
-    if path == 'AetherField':
+def _hosted_calibration_scope(path: str) -> Optional[str]:
+    key = str(path).strip().lower()
+    if key == "aetherfield":
+        return HOSTED_CALIBRATION_DEFAULT_SCOPE
+    if key in HOSTED_CALIBRATION_SCOPES:
+        return key
+    return None
+
+
+def _hosted_calibration_url(scope: str) -> str:
+    if scope == HOSTED_CALIBRATION_DEFAULT_SCOPE:
+        return REMOTE_URL
+    return f"{REMOTE_URL}?scope={scope}"
+
+
+def _load_hosted_calibration(scope: str) -> Dict[str, Any]:
+    global data
+    cached = _HOSTED_CALIBRATION_CACHE.get(scope)
+    if cached is not None:
+        data = cached
+        return cached
+
+    import urllib.request
+
+    with urllib.request.urlopen(_hosted_calibration_url(scope), timeout=10) as response:
+        loaded = json.load(response)
+    _HOSTED_CALIBRATION_CACHE[scope] = loaded
+    data = loaded
+    return loaded
+
+
+def _resolve_cal_path(path: str) -> str | Path:
+    if _hosted_calibration_scope(path):
         return path
     p = Path(path)
     if p.is_file():
@@ -1020,37 +1054,28 @@ class AetherField:
 
     @classmethod
     def load_calibration(cls, path: str) -> 'AetherField':
-        global data
         """Load rates, anchors, and piecewise segments from JSON.
 
-        Falls back to an uncalibrated field if hosted or local calibration cannot
-        be loaded.
+        Pass "small", "medium", or "large" to load a hosted calibration scope.
+        "AetherField" remains an alias for the default hosted scope. Falls back
+        to an uncalibrated field if hosted or local calibration cannot be loaded.
         """
         try:
-            if path == 'AetherField':
-
-                if not data:
-                    # 2. Remote fetch
-                    import urllib.request
-
-                    with urllib.request.urlopen(REMOTE_URL, timeout=10) as response:
-                        data = json.load(response)
-
-                    #return data
-
+            scope = _hosted_calibration_scope(path)
+            if scope:
+                loaded_data = _load_hosted_calibration(scope)
             else:
-
                 with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+                    loaded_data = json.load(f)
         except Exception:
             return cls()
 
-        if not isinstance(data, dict):
+        if not isinstance(loaded_data, dict):
             return cls()
 
-        rates = data.get('rates_deg_per_day') or data.get('rates') or {}        
-        anchors_min = data.get('anchors_min') or {}
-        anchors_max = data.get('anchors_max') or {}
+        rates = loaded_data.get('rates_deg_per_day') or loaded_data.get('rates') or {}
+        anchors_min = loaded_data.get('anchors_min') or {}
+        anchors_max = loaded_data.get('anchors_max') or {}
         def _parse_window_dt(value: Optional[str], fallback: datetime) -> datetime:
             if not value:
                 return None
@@ -1063,15 +1088,15 @@ class AetherField:
                 return None
 
         window_start = _parse_window_dt(
-            data.get('ephemeris_start') or data.get('calibration_start') or data.get('de421_start'),
+            loaded_data.get('ephemeris_start') or loaded_data.get('calibration_start') or loaded_data.get('de421_start'),
             EPHEMERIS_START,
         )
         window_end = _parse_window_dt(
-            data.get('ephemeris_end') or data.get('calibration_end') or data.get('de421_end'),
+            loaded_data.get('ephemeris_end') or loaded_data.get('calibration_end') or loaded_data.get('de421_end'),
             EPHEMERIS_END,
         )
-        ephemeris_name = data.get('ephemeris_name')
-        ephemeris_path = data.get('ephemeris_path')
+        ephemeris_name = loaded_data.get('ephemeris_name')
+        ephemeris_path = loaded_data.get('ephemeris_path')
         inst = cls(
             rates_deg_per_day=rates,
             anchors_min=anchors_min,
@@ -1081,7 +1106,7 @@ class AetherField:
             ephemeris_name=ephemeris_name,
             ephemeris_path=ephemeris_path,
         )
-        piecewise_data = data.get('piecewise') or {}
+        piecewise_data = loaded_data.get('piecewise') or {}
         pw: Dict[str, List[DriftSegment]] = {}
         for b, segs in piecewise_data.items():
             parsed: List[DriftSegment] = []
