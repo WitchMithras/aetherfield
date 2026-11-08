@@ -34,6 +34,11 @@ At its core, AetherField answers a simple question:
 pip install aetherfield
 ```
 
+Hosted calibration defaults to
+`http://papyros:5999/v1/aether/calibration/file` on Papyros.
+Set `AETHERFIELD_REMOTE_URL` before starting the app (or in `.env`) to use a
+different full endpoint URL.
+
 ---
 
 ## 🚀 Quick Example

@@ -10,6 +10,7 @@ surface stable.
 from .core import (
     get_age_sign,
     get_zodiac_by_longitude_dt,
+    get_zodiac_wheel,
     rotated_zodiac,
     aether_longitude,
     aether_longitude_mt,
@@ -39,6 +40,7 @@ from .core import (
 
 __all__ = [
     "get_zodiac_by_longitude_dt",
+    "get_zodiac_wheel",
     "get_age_sign",
     "rotated_zodiac",
     "OBLIQUITY_DEG",

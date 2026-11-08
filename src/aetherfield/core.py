@@ -56,9 +56,8 @@ ANCHOR_YEAR = 1
 ANCHOR_SIGN = "Pisces"
 
 CACHE_PATH = os.path.join(os.path.expanduser("~"), ".cache", "aetherfield", "aetherfield_calibration.json")
-REMOTE_URL = "https://pythoness.duckdns.org/v1/aether/calibration/file"
-
 load_dotenv()
+REMOTE_URL = os.getenv("AETHERFIELD_REMOTE_URL", "http://papyros:5999/v1/aether/calibration/file")
 
 def _wrap_deg(x: float) -> float:
     return x % 360.0
@@ -266,18 +265,28 @@ def get_age_sign(year: int) -> str:
     return SIGNS[sign_index]
 
 
-def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
-    dt = _as_datetime(dt)
-    year = dt.year
+def get_zodiac_wheel(dt: datetime, *, zodiac: str = "aetherfield") -> list[tuple[str, float]]:
+    """Return ordered sign boundaries for the full, even, or tropical zodiac."""
+    if zodiac == "tropical":
+        signs = SIGNS
+    elif zodiac in ("aetherfield", "even"):
+        year = _as_datetime(dt).year
+        age_sign = get_age_sign(year)
+        if zodiac == "aetherfield":
+            return build_age_transition_wheel(ZODIAC_BOUNDARIES, age_sign, year)
+        signs = rotated_zodiac(age_sign)
+    else:
+        raise ValueError(f"Unknown zodiac wheel {zodiac!r}.")
+    return [(sign, index * 30.0) for index, sign in enumerate(signs)]
+
+
+def get_zodiac_by_longitude_dt(longitude: float, dt: datetime, *, zodiac: str = "aetherfield") -> str:
+    if zodiac == "tropical":
+        return get_tropical_zodiac_by_longitude(longitude)
+    if zodiac == "even":
+        return get_zodiac_by_longitude_even(longitude, dt)
     longitude = longitude % 360
-
-    age_sign = get_age_sign(year)
-
-    wheel = build_age_transition_wheel(
-        ZODIAC_BOUNDARIES,
-        age_sign,
-        year
-    )
+    wheel = get_zodiac_wheel(dt, zodiac=zodiac)
 
     for i, (sign, start) in enumerate(wheel):
         next_start = wheel[(i + 1) % len(wheel)][1]
@@ -292,13 +301,9 @@ def get_zodiac_by_longitude_dt(longitude: float, dt: datetime) -> str:
     return wheel[-1][0]
 
 def get_zodiac_by_longitude_even(longitude: float, dt: datetime) -> str:
-    dt = _as_datetime(dt)
-    year = dt.year
-    age_sign = get_age_sign(year)
-    signs = rotated_zodiac(age_sign)
-
+    wheel = get_zodiac_wheel(dt, zodiac="even")
     i = int(longitude // 30) % 12
-    return signs[i]
+    return wheel[i][0]
 
 try:
     # Reuse existing helper for sign segmentation if present
@@ -314,13 +319,8 @@ except Exception:
         return signs[i]
 
 def get_tropical_zodiac_by_longitude(longitude: float) -> str:
-    signs = [
-        "Aries", "Taurus", "Gemini", "Cancer", "Leo",
-        "Virgo", "Libra", "Scorpio", "Sagittarius",
-        "Capricorn", "Aquarius", "Pisces"
-    ]
     i = int(longitude // 30) % 12
-    return signs[i]
+    return SIGNS[i]
 
 def refine_border(af, left, right, body="sun", steps=24):
     """
